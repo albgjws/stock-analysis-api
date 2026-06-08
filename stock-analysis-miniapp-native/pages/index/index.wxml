@@ -1,0 +1,65 @@
+<view class="page">
+  <!-- 顶部标题 -->
+  <view class="header">
+    <text class="header-icon">📈</text>
+    <text class="header-title">A股分析助手</text>
+    <text class="header-sub">智能技术分析 · 趋势预测 · 买卖信号</text>
+  </view>
+
+  <!-- 搜索框 -->
+  <view class="search-box">
+    <view class="search-bar">
+      <text class="search-icon">🔍</text>
+      <input class="search-input" placeholder="输入代码或名称，如 600519、茅台" bindinput="onInput" confirm-type="search" value="{{keyword}}" />
+      <text wx:if="{{keyword}}" class="search-clear" bindtap="clearInput">✕</text>
+    </view>
+  </view>
+
+  <!-- 搜索结果 -->
+  <view wx:if="{{keyword}}" class="list-wrap">
+    <view wx:if="{{searching}}" class="loading">搜索中...</view>
+    <view wx:elif="{{results.length === 0}}" class="loading"><text style="color:#999;">未找到匹配的股票</text></view>
+    <scroll-view scroll-y class="result-scroll" wx:else>
+      <view wx:for="{{results}}" wx:key="code" class="result-item" bindtap="onSelect" data-code="{{item.code}}" data-name="{{item.name}}" data-market="{{item.market}}">
+        <view class="result-left">
+          <text class="result-name">{{item.name}}</text>
+          <text class="result-code">{{item.code}}</text>
+        </view>
+        <view class="result-right">
+          <text class="tag {{item.market === 'sh' ? 'tag-red' : item.market === 'sz' ? 'tag-green' : 'tag-blue'}}">{{item.market === 'sh' ? 'SH' : item.market === 'sz' ? 'SZ' : 'HK'}}</text>
+          <text class="result-arrow">›</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 历史记录 -->
+  <view wx:elif="{{history.length > 0}}" class="section">
+    <view class="section-header">
+      <text class="section-title">🕐 最近搜索</text>
+      <text class="section-action" bindtap="clearHistory">清空</text>
+    </view>
+    <view wx:for="{{history}}" wx:key="code" class="result-item" bindtap="onSelect" data-code="{{item.code}}" data-name="{{item.name}}" data-market="{{item.market}}">
+      <view class="result-left">
+        <text class="result-name">{{item.name}}</text>
+        <text class="result-code">{{item.code}}</text>
+      </view>
+      <view class="result-right">
+        <text class="tag {{item.market === 'sh' ? 'tag-red' : item.market === 'sz' ? 'tag-green' : 'tag-blue'}}">{{item.market === 'sh' ? 'SH' : item.market === 'sz' ? 'SZ' : 'HK'}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 功能引导 -->
+  <view wx:else class="guide">
+    <view class="guide-icon">📈</view>
+    <text class="guide-title">智能A股分析</text>
+    <text class="guide-desc">输入股票代码或名称，获取全面的技术分析、趋势预测和买卖建议</text>
+    <view class="feature-grid">
+      <view class="feature-card"><text class="fc-icon">📊</text><text class="fc-label">技术指标</text><text class="fc-desc">MACD/RSI/KDJ</text></view>
+      <view class="feature-card"><text class="fc-icon">🔮</text><text class="fc-label">趋势预测</text><text class="fc-desc">ARIMA模型</text></view>
+      <view class="feature-card"><text class="fc-icon">💡</text><text class="fc-label">买卖信号</text><text class="fc-desc">多指标评分</text></view>
+      <view class="feature-card"><text class="fc-icon">📉</text><text class="fc-label">预测回测</text><text class="fc-desc">自我校正</text></view>
+    </view>
+  </view>
+</view>

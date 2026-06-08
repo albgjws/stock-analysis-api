@@ -1,0 +1,253 @@
+<view class="page">
+
+  <!-- Loading / Error -->
+  <view wx:if="{{loading}}" class="page-center">
+    <view class="spinner"></view>
+    <text>加载中...</text>
+  </view>
+  <view wx:elif="{{error}}" class="page-center">
+    <text style="font-size:32px;margin-bottom:4px;">⚠️</text>
+    <text style="color:#ff4d4f;margin-bottom:8px;">{{error}}</text>
+    <button class="retry-btn" bindtap="fetchData">重试</button>
+  </view>
+
+  <view wx:else>
+    <!-- ===== 大盘指数条 ===== -->
+    <view wx:if="{{idxData&&idxData.length}}" class="idx-bar">
+      <view wx:for="{{idxData}}" wx:key="code" class="idx-item">
+        <text class="idx-name">{{item.name}}</text>
+        <text class="idx-price price-{{item.cls}}">{{item.price}}</text>
+        <text class="idx-pct price-{{item.cls}}">{{item.pct}}</text>
+      </view>
+    </view>
+
+    <!-- ===== ① 股票概览 ===== -->
+    <view class="card">
+      <view class="ov-header">
+        <view>
+          <text class="ov-name">{{stockName}}</text>
+          <text class="ov-code">{{code}}</text>
+          <text class="tag {{marketTagClass}}">{{marketTagText}}</text>
+        </view>
+        <view style="display:flex;align-items:center;gap:6px;">
+          <text wx:if="{{isLive}}" style="font-size:10px;color:#52c41a;font-weight:600;">● 实时</text>
+          <text class="ov-price price-{{cc}}">{{priceText}}</text>
+        </view>
+      </view>
+      <view class="ov-change">
+        <text class="ov-pct price-{{cc}}">{{cpText}}</text>
+        <text class="ov-chg price-{{cc}}">涨跌 {{chgText}}</text>
+      </view>
+      <view class="ov-grid">
+        <view><text class="ov-lbl">最高</text><text class="ov-val price-up" style="font-weight:600;">{{hiText}}</text></view>
+        <view><text class="ov-lbl">最低</text><text class="ov-val price-down" style="font-weight:600;">{{loText}}</text></view>
+        <view><text class="ov-lbl">今开</text><text class="ov-val">{{opText}}</text></view>
+        <view><text class="ov-lbl">昨收</text><text class="ov-val">{{pcText}}</text></view>
+        <view><text class="ov-lbl">成交量</text><text class="ov-val">{{volText}}</text></view>
+        <view><text class="ov-lbl">成交额</text><text class="ov-val" style="color:#1677ff;">{{amtText}}</text></view>
+        <view><text class="ov-lbl">市值</text><text class="ov-val">{{mcText}}</text></view>
+        <view><text class="ov-lbl">换手率</text><text class="ov-val" style="color:#999;">{{trText}}</text></view>
+      </view>
+    </view>
+
+    <!-- ===== ② 建仓建议 ===== -->
+    <view wx:if="{{sig}}" class="card">
+      <view class="rw">
+        <view class="sig-badge sig-{{sigClsName}}">{{sigLabel}}</view>
+        <text style="font-size:12px;color:#999;">综合 <text class="price-{{ssc}}" style="font-weight:700;">{{sigStrengthText}}</text></text>
+      </view>
+      <view class="rw" style="margin-top:10px;">
+        <view class="sr-box"><text class="sr-lbl">🛡️ 支撑位</text><text class="sr-dn">{{supText}}</text></view>
+        <view class="sr-box"><text class="sr-lbl">🎯 阻力位</text><text class="sr-up">{{resText}}</text></view>
+      </view>
+    </view>
+
+    <!-- ===== ③ 专业信号 ===== -->
+    <view wx:if="{{hasThreeLocks||hasTd||hasSwing}}" class="card">
+      <text class="ct">🔒 专业信号 · 三把锁 · 九转 · 波段</text>
+
+      <view wx:if="{{hasThreeLocks}}">
+        <text class="ct-sm">三把锁</text>
+        <view wx:for="{{threeLocks}}" wx:key="date" class="sig-row">
+          <text class="sig-icon">{{item.lockCount===3?'🔒⚡':'🔒'}}</text>
+          <view style="flex:1;">
+            <text class="sig-tit">{{item.date}} <text class="sig-tag sig-tag-red">{{item.lockCount}}/3锁</text> {{item.type==='buy'?'买入':'卖出'}}</text>
+            <text class="sig-desc">{{item.details.join(' · ')}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{hasTd}}" style="margin-top:8px;">
+        <text class="ct-sm">神奇九转</text>
+        <view wx:for="{{tdSeq}}" wx:key="date" class="sig-row">
+          <text class="sig-icon">{{item.count>0?'🔴':'🟢'}}{{Math.abs(item.count)}}</text>
+          <view style="flex:1;">
+            <text class="sig-tit">{{item.date}} <text class="sig-tag {{item.count>0?'sig-tag-red':'sig-tag-green'}}">{{item.count>0?'上涨':'下跌'}} {{Math.abs(item.count)}}</text>
+            <text wx:if="{{item.isReversal}}" style="color:#d48806;font-size:12px;"> ⚠️ 达到9转，反转预警</text>
+            </text>
+          </view>
+        </view>
+      </view>
+
+      <view wx:if="{{hasSwing}}" style="margin-top:8px;">
+        <text class="ct-sm">波段买卖点</text>
+        <view wx:for="{{swingPts}}" wx:key="date" class="sig-row">
+          <text class="sig-icon">{{item.type==='buy'?'▲':'▼'}}</text>
+          <text class="sig-tit">{{item.date}} {{item.reason}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== ④ 主力资金 ===== -->
+    <view wx:if="{{ffData&&ffData.length>0}}" class="card">
+      <text class="ct">💰 主力资金流向 <text style="font-size:12px;font-weight:400;color:#999;">最近{{ffData.length}}天</text></text>
+      <view class="fw-chart">
+        <view wx:for="{{ffData}}" wx:key="idx" class="fw-bar" style="height:{{item.h}}%;background:{{item.c}};"></view>
+      </view>
+      <text class="ch-lbl">主力净占比 {{ffLatest}}%</text>
+    </view>
+
+    <!-- ===== ⑤ 指标图表：MACD / RSI / KDJ ===== -->
+    <view class="card" style="padding:12px 16px;">
+      <view class="rw">
+        <view wx:if="{{macdBars.length>0}}" style="flex:1;margin-right:4px;">
+          <text class="ct-sm" style="margin:0 0 4px;">📊 MACD {{macdSummary}}</text>
+          <view class="ch" style="height:70px;">
+            <view wx:for="{{macdBars}}" wx:key="idx" class="ch-bar" style="height:{{item.h}}%;background:{{item.c}};margin-top:{{35-item.h}}%;"></view>
+          </view>
+          <view class="rw" style="font-size:10px;color:#999;margin-top:2px;">
+            <text style="color:#1677ff;">DIF {{macdDif}}</text>
+            <text style="color:#faad14;">DEA {{macdDea}}</text>
+            <text class="price-{{macdBarCls}}">柱 {{macdBarVal}}</text>
+          </view>
+        </view>
+        <view wx:if="{{rsiBars.length>0}}" style="flex:1;margin:0 4px;">
+          <text class="ct-sm" style="margin:0 0 4px;">📈 RSI {{rsiSummary}}</text>
+          <view class="ch" style="height:70px;">
+            <view class="rsi-70"></view><view class="rsi-30"></view>
+            <view wx:for="{{rsiBars}}" wx:key="idx" class="rsi-bar" style="height:{{item.h}}%;background:{{item.c}};margin-top:{{85-item.h}}%;"></view>
+          </view>
+          <text class="ch-lbl">当前 {{rsiNow}} · 超买70 · 超卖30</text>
+        </view>
+        <view wx:if="{{kdjBars.length>0}}" style="flex:1;margin-left:4px;">
+          <text class="ct-sm" style="margin:0 0 4px;">📉 KDJ {{kdjSummary}}</text>
+          <view class="ch" style="height:70px;">
+            <view wx:for="{{kdjBars}}" wx:key="idx" class="kj-bar" style="height:{{item.k}}%;margin-top:{{80-item.k}}%;background:rgba(22,119,255,0.5);"></view>
+            <view wx:for="{{kdjBars}}" wx:key="idx" class="kj-bar" style="height:{{item.d}}%;margin-top:{{80-item.d}}%;background:rgba(250,173,20,0.5);"></view>
+          </view>
+          <view class="rw" style="font-size:10px;color:#999;margin-top:2px;">
+            <text style="color:#1677ff;">K {{kdjK}}</text>
+            <text style="color:#faad14;">D {{kdjD}}</text>
+            <text style="color:#ff4d4f;">J {{kdjJ}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== ⑥ 技术指标评分 + 详情 ===== -->
+    <view wx:if="{{sigItems.length>0}}" class="card">
+      <text class="ct">🔬 技术指标 <text style="font-size:12px;font-weight:400;color:#999;">{{sigBuyCount}}个看多 · {{sigSellCount}}个看空 · {{sigNeutralCount}}个中性</text></text>
+      <view wx:for="{{sigItems}}" wx:key="idx" class="ind-row">
+        <view style="flex:1;margin-right:8px;">
+          <text class="ind-nm">{{item.name}}</text>
+          <view class="bar-bg"><view class="bar-fill bar-{{item.cls}}" style="width:{{item.pct}}%;"></view></view>
+        </view>
+        <view class="rw" style="flex-shrink:0;gap:6px;">
+          <text class="tag tag-{{item.tagCls}}">{{item.label}}</text>
+          <text class="price-{{item.cls}}" style="font-weight:700;font-size:14px;min-width:36px;text-align:right;">{{item.score}}</text>
+        </view>
+      </view>
+      <!-- 信号详情描述 -->
+      <view wx:if="{{sigDetails.length>0}}" style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f0;">
+        <view wx:for="{{sigDetails}}" wx:key="name" class="sig-detail">
+          <text class="sig-tag {{item.tagCls==='red'?'sig-tag-red':'sig-tag-green'}}" style="margin-right:4px;">{{item.tagCls==='red'?'买入':item.tagCls==='green'?'卖出':'中性'}}</text>
+          <text>{{item.desc}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===== ⑦ 今日分时 ===== -->
+    <view wx:if="{{tlBars.length>0}}" class="card">
+      <text class="ct">⚡ 今日分时</text>
+      <view class="ch" style="height:120px;">
+        <view wx:for="{{tlBars}}" wx:key="idx" class="tl-bar" style="height:{{item.h}}%;background:{{item.c}};"></view>
+      </view>
+      <view class="rw" style="font-size:12px;color:#999;margin-top:6px;">
+        <text>开 {{idOpenText}}</text>
+        <text class="price-{{cc}}">最新 {{priceText}}</text>
+        <text>均 {{idAvgText}}</text>
+      </view>
+    </view>
+
+    <!-- ===== ⑧ K线 + 预测 ===== -->
+    <view wx:if="{{hk}}" class="card">
+      <text class="ct">📊 K线 {{klCount}}条 · {{klLastDate}}</text>
+      <view class="kl-ch">
+        <view wx:for="{{klBars}}" wx:key="date" class="kl-bar" style="height:{{item.h}}%;background:{{item.c}};margin-top:{{95-item.h}}%;"></view>
+      </view>
+      <view class="ov-grid" style="margin-top:8px;">
+        <view><text class="ov-lbl">预测趋势</text><text class="ov-val price-{{predCls}}">{{predTrend}}</text></view>
+        <view><text class="ov-lbl">置信度</text><text class="ov-val">{{predConf}}</text></view>
+        <view><text class="ov-lbl">预测区间</text><text class="ov-val">{{predRange}}</text></view>
+      </view>
+    </view>
+
+    <!-- ===== ⑨ 当日复盘 ===== -->
+    <view wx:if="{{hk}}" class="card">
+      <text class="ct">📋 当日专业复盘</text>
+      <text class="rc-title">今日行情综述</text>
+      <view class="rc-lines"><view class="rc-line">{{r0}}</view><view class="rc-line">{{rVol}}</view></view>
+      <text class="rc-title">技术面分析</text>
+      <view class="rc-lines"><view class="rc-line">{{r1}}</view><view class="rc-line">{{r2}}</view><view class="rc-line">{{r3}}</view></view>
+      <text class="rc-title">操作建议</text>
+      <view class="rc-lines"><view class="rc-line">{{rOp}}</view><view class="rc-line">{{rSL}}</view></view>
+      <text class="rc-title">后市预测</text>
+      <view class="rc-lines"><view class="rc-line">{{rOutlook}}</view></view>
+    </view>
+
+    <!-- ===== ⑩ 止损止盈 ===== -->
+    <view wx:if="{{sig}}" class="card">
+      <text class="ct">🎯 止损止盈</text>
+      <view class="rw" style="gap:12px;">
+        <view class="sl-card sl-stop"><text class="sl-icon">🛡️</text><text class="sl-dn">{{slText}}</text><text style="font-size:12px;color:#666;display:block;">止损价</text><text class="sl-rs">{{slReason}}</text></view>
+        <view class="sl-card sl-profit"><text class="sl-icon">🏆</text><text class="sl-up">{{tpText}}</text><text style="font-size:12px;color:#666;display:block;">止盈价</text><text class="sl-rs">{{tpReason}}</text></view>
+      </view>
+    </view>
+
+    <!-- ===== ⑪ 预测回测 ===== -->
+    <view wx:if="{{bt&&bt.hasHistory}}" class="card" style="border:1px solid #d3adf7;">
+      <text class="ct">📉 预测回测 · {{bt.date}}</text>
+      <view class="ov-grid">
+        <view><text class="ov-lbl">方向判断</text><text style="color:{{btDirClr}};font-weight:600;">{{btDirTxt}}</text></view>
+        <view><text class="ov-lbl">平均误差</text><text style="font-weight:600;">{{btMae}}</text></view>
+        <view><text class="ov-lbl">最大偏差</text><text style="font-weight:600;">{{btMax}}</text></view>
+        <view><text class="ov-lbl">80%命中</text><text style="font-weight:600;">{{btWithin}}</text></view>
+      </view>
+    </view>
+
+    <!-- ===== ⑫ 买入诊断 ===== -->
+    <view class="card">
+      <text class="ct">💎 买入诊断</text>
+      <view class="rw">
+        <input class="diag-inp" placeholder="输入买入价" bindinput="onBuyInput" value="{{buyVal}}" />
+        <button class="diag-btn" bindtap="doDiag">诊断</button>
+      </view>
+      <view wx:if="{{diag}}" class="diag-box">
+        <view class="rw">
+          <view class="rate-box rate-{{diag.rating}}">{{diag.ratingLabel}}</view>
+          <view style="text-align:center;"><text class="diag-num price-{{diagScoreCls}}">{{diag.score}}</text><text class="diag-lbl">综合评分</text></view>
+          <view style="text-align:center;"><text class="diag-num price-{{diagProbCls}}">{{diagProbTxt}}</text><text class="diag-lbl">上涨概率</text></view>
+        </view>
+        <view class="rw" style="margin-top:8px;">
+          <view class="sl-card sl-stop" style="flex:1;"><text class="sl-dn" style="font-size:16px;">{{diagSlText}}</text><text class="sl-lbl" style="font-size:11px;color:#666;">止损</text></view>
+          <view class="sl-card sl-profit" style="flex:1;"><text class="sl-up" style="font-size:16px;">{{diagTpText}}</text><text class="sl-lbl" style="font-size:11px;color:#666;">止盈</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部 -->
+    <view style="padding:24px 16px;text-align:center;font-size:11px;color:#bbb;line-height:1.8;">
+      数据来源：东方财富 / 腾讯证券<br/>本工具仅供学习参考，不构成投资建议
+    </view>
+  </view>
+</view>

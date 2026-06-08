@@ -1,0 +1,19 @@
+<canvas
+  wx:if="{{!isUseNewCanvas}}"
+  id="ec-canvas-{{canvasId}}"
+  canvas-id="ec-canvas-{{canvasId}}"
+  type="2d"
+  style="width:100%;height:100%;"
+  bindtouchstart="touchStart"
+  bindtouchmove="touchMove"
+  bindtouchend="touchEnd"
+/>
+<canvas
+  wx:else
+  id="ec-canvas-{{canvasId}}"
+  type="2d"
+  style="width:100%;height:100%;"
+  bindtouchstart="touchStart"
+  bindtouchmove="touchMove"
+  bindtouchend="touchEnd"
+/>

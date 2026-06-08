@@ -1,0 +1,418 @@
+import { StockSDK } from 'stock-sdk';
+import { CacheService } from './cacheService';
+import { config } from '../config';
+import type { SearchResultItem, StockInfo, KlineBar } from '../types';
+
+export class StockDataService {
+  private sdk: StockSDK;
+  private cache: CacheService;
+  private stockListCache: SearchResultItem[] | null = null;
+
+  constructor() {
+    this.sdk = new StockSDK({
+      retry: { maxRetries: 0 },
+    });
+    this.cache = new CacheService();
+  }
+
+  /**
+   * Search for stocks by keyword (code, name, or pinyin)
+   * 支持 A股 + 港股
+   */
+  async searchStocks(keyword: string): Promise<SearchResultItem[]> {
+    try {
+      const results = await this.sdk.search(keyword);
+      return results
+        .filter((r: any) =>
+          r.category === 'stock' &&
+          (r.type === 'GP-A' || r.type === 'GP')  // A股 + 港股
+        )
+        .map((r: any) => {
+          const prefix = r.code.match(/^(sh|sz|bj|hk)/)?.[1] || 'sh';
+          return {
+            code: r.code.replace(/^(sh|sz|bj|hk)/, ''),
+            name: r.name,
+            market: prefix,
+            type: r.type,
+          };
+        });
+    } catch (err) {
+      console.error('[StockData] Search failed:', err);
+      return this.fallbackSearch(keyword);
+    }
+  }
+
+  /**
+   * Get real-time stock info (supports A-share + HK)
+   * 高开低收直接从腾讯 fqkline API 获取，不经过 stock-sdk 缓存
+   */
+  async getStockInfo(code: string): Promise<StockInfo> {
+    const normalized = this.normalizeCode(code);
+    const isHK = normalized.startsWith('hk');
+
+    // 获取基础行情
+    const quotes = await this.sdk.getSimpleQuotes([normalized]);
+    if (!quotes || quotes.length === 0) throw new StockNotFoundError(code);
+    const q = quotes[0];
+    const prevClose = q.price - (q.change || 0);
+
+    // 直接从腾讯 API 获取今天 K线（绕过 stock-sdk 缓存和故障路径）
+    let dayOpen = prevClose, dayHigh = 0, dayLow = 0, dayVolume = q.volume, dayAmount = q.amount;
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      // 只用最近3天的K线，确保拿到今天的
+      const url = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${normalized},day,2026-01-01,${todayStr},5,qfq`;
+      const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const json = await resp.json() as any;
+      const rawData = json?.data?.[normalized]?.qfqday || json?.data?.[normalized]?.day || [];
+
+      if (rawData.length > 0) {
+        // 找今天的K线（最后一条，date匹配今天）
+        const lastBar = rawData[rawData.length - 1];
+        if (lastBar && Array.isArray(lastBar) && lastBar.length >= 6) {
+          const barDate = String(lastBar[0]);
+          if (barDate === todayStr) {
+            // 腾讯K线成交量单位是"手"，转成"股"
+            dayOpen = parseFloat(lastBar[1]) || prevClose;
+            dayHigh = parseFloat(lastBar[3]) || q.price;
+            dayLow = parseFloat(lastBar[4]) || q.price;
+            const klineVol = parseInt(lastBar[5]) || 0;
+            dayVolume = klineVol * 100; // 手→股
+            dayAmount = parseFloat(lastBar[6]) || 0;
+          }
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[StockInfo] Tencent kline failed: ${e.message}`);
+    }
+
+    // 如果腾讯K线没有今天的数据（盘中），用分时数据
+    if (!dayHigh || !dayLow) {
+      try {
+        const timeline = await this.sdk.getTodayTimeline(normalized) as any;
+        if (timeline?.data && timeline.data.length > 5) {
+          const prices = timeline.data.map((p: any) => parseFloat(p.price)).filter((p: number) => p > 0 && isFinite(p));
+          if (prices.length > 5) {
+            dayHigh = Math.max(...prices);
+            dayLow = Math.min(...prices);
+            dayOpen = prices[0];
+            const lp = timeline.data[timeline.data.length - 1];
+            if (lp && parseFloat(lp.volume) > 0) dayVolume = parseInt(lp.volume);
+          }
+        }
+      } catch {}
+    }
+
+    // 最终兜底
+    if (!dayHigh || !dayLow) {
+      dayHigh = Math.max(q.price, prevClose);
+      dayLow = Math.min(q.price, prevClose);
+    }
+    if (!dayOpen) dayOpen = prevClose;
+
+    // 成交额
+    if (dayAmount <= 0 || dayAmount > 1e12) dayAmount = q.amount;
+    if (!isHK && dayAmount < 1e12) dayAmount = dayAmount * 10000;
+
+    // 换手率（dayVolume 统一为"股"，K线来的×100转换过，分时来的已经是股）
+    const volumeShares = dayVolume;
+    const totalShares = q.price > 0 ? ((q.marketCap ?? 0) * 100000000 / q.price) : 0;
+    const turnoverRate = totalShares > 0 ? (volumeShares / totalShares) * 100 : 0;
+
+    // 调试日志
+    console.log(`[StockInfo] ${normalized}: price=${q.price} open=${dayOpen} high=${dayHigh} low=${dayLow} vol=${dayVolume} mcap=${q.marketCap} turnover=${turnoverRate.toFixed(4)}%`);
+
+    return {
+      code: q.code,
+      name: q.name,
+      market: normalized.slice(0, 2),
+      price: q.price,
+      change: q.change,
+      changePercent: q.changePercent,
+      high: Math.round(dayHigh * 100) / 100,
+      low: Math.round(dayLow * 100) / 100,
+      volume: dayVolume,
+      amount: dayAmount,
+      marketCap: (q.marketCap ?? 0) * (isHK ? 1 : 100000000),
+      open: Math.round(dayOpen * 100) / 100,
+      prevClose: q.price - (q.change || 0),
+      turnoverRate: Math.round(turnoverRate * 100) / 100,
+    };
+  }
+
+  /**
+   * Get K-line data with technical indicators
+   */
+  async getKlineWithIndicators(
+    code: string,
+    options: {
+      count?: number;
+      fq?: 'qfq' | 'hfq' | '';
+      indicators?: Record<string, any>;
+    } = {}
+  ): Promise<KlineBar[]> {
+    const normalized = this.normalizeCode(code);
+    const count = Math.min(options.count || config.defaultKlineCount, config.maxKlineCount);
+    const fq = options.fq || 'qfq';
+
+    const cacheKey = `kline_${normalized}_${count}_${fq}`;
+
+    // Check cache
+    const cached = await this.cache.get<KlineBar[]>(cacheKey);
+    if (cached) return cached;
+
+    // 数据源不可用时5分钟内不再重试
+    const failKey = "kline_fail_" + normalized;
+    const failed = await this.cache.get(failKey);
+    if (failed) {
+      throw new Error("数据源暂时不可用: " + normalized);
+    }
+
+    // Retry with different approaches
+    let kline: any = null;
+    const errors: string[] = [];
+    const isHK = normalized.startsWith('hk');
+
+    // 港股优先尝试 HK 专用接口
+    if (isHK) {
+      try {
+        const rawKline = await this.sdk.getHKHistoryKline(normalized, {
+          count: Math.max(count, 300),
+        } as any);
+        if (rawKline && rawKline.length > 0) {
+          kline = rawKline.map((bar: any) => ({
+            date: bar.date,
+            open: bar.open,
+            close: bar.close,
+            high: bar.high,
+            low: bar.low,
+            volume: bar.volume || 0,
+            amount: bar.amount || 0,
+            changePercent: bar.changePercent,
+            change: bar.change,
+          }));
+        }
+      } catch (err: any) {
+        errors.push(`HK-kline: ${err.message}`);
+      }
+    }
+
+    // 尝试1: 标准带指标请求
+    try {
+      kline = await this.sdk.getKlineWithIndicators(normalized, {
+        count: Math.max(count, 300),
+        fq,
+        indicators: options.indicators || {
+          ma: { periods: [5, 10, 20, 60] },
+          macd: { fast: 12, slow: 26, signal: 9 },
+          boll: { period: 20, stdDev: 2 },
+          rsi: { period: 14 },
+          kdj: { period: 9, kPeriod: 3, dPeriod: 3 },
+        },
+      } as any);
+    } catch (err: any) {
+      errors.push(err.message);
+    }
+
+    // 尝试2: 如果不带指标（纯K线数据）
+    if (!kline || kline.length === 0) {
+      await this.cache.set(failKey, true, 5 * 60 * 1000);
+      try {
+        kline = await this.sdk.getKlineWithIndicators(normalized, {
+          count: Math.max(count, 300),
+          fq,
+          indicators: { ma: { periods: [5] } },
+        } as any);
+      } catch (err: any) {
+        errors.push(err.message);
+      }
+    }
+
+    // 尝试3: 用 historyKline（原始K线，不含技术指标）
+    if (!kline || kline.length === 0) {
+      try {
+        const rawKline = await this.sdk.getHistoryKline(normalized, {
+          count: Math.max(count, 300),
+          fq,
+        } as any);
+        if (rawKline && rawKline.length > 0) {
+          // 手动补充基础字段
+          kline = rawKline.map((bar: any) => ({
+            ...bar,
+            ma: undefined,
+            macd: undefined,
+            boll: undefined,
+            rsi: undefined,
+            kdj: undefined,
+          }));
+        }
+      } catch (err: any) {
+        errors.push(err.message);
+      }
+    }
+
+
+    // 尝试4: 腾讯 fqkline API（备选数据源）
+    if (!kline || kline.length === 0) {
+      try {
+        const today = new Date();
+        const past = new Date(today);
+        past.setDate(past.getDate() - Math.max(count, 60));
+        const start = past.toISOString().split('T')[0];
+        const end = today.toISOString().split('T')[0];
+        const fqParam = fq === "qfq" ? "qfq" : "";
+        const url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=" + normalized + ",day," + start + "," + end + "," + count + "," + fqParam;
+        const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+        const json = await res.json();
+        const rawData = json?.data?.[normalized]?.qfqday || json?.data?.[normalized]?.day || [];
+
+        if (rawData && rawData.length > 0) {
+          kline = rawData.map((bar: any) => {
+            if (!Array.isArray(bar) || bar.length < 6) return null;
+            return {
+              date: bar[0],
+              open: parseFloat(bar[1]),
+              close: parseFloat(bar[2]),
+              high: parseFloat(bar[3]),
+              low: parseFloat(bar[4]),
+              volume: parseFloat(bar[5]) || 0,
+              amount: parseFloat(bar[6]) || 0,
+              changePercent: undefined,
+              change: undefined,
+            };
+          }).filter(Boolean);
+          console.log("[TencentKline] Got " + kline.length + " bars for " + normalized);
+        }
+      } catch (err: any) {
+        errors.push("Tencent: " + err.message);
+      }
+    }
+
+    if (!kline || kline.length === 0) {
+      throw new Error(
+        `无法获取K线数据: ${errors.join('; ')}`
+      );
+    }
+
+    const result = kline.slice(-count).map((bar: any) => ({
+      date: bar.date,
+      open: bar.open,
+      close: bar.close,
+      high: bar.high,
+      low: bar.low,
+      volume: bar.volume,
+      amount: bar.amount,
+      changePercent: bar.changePercent,
+      change: bar.change,
+      amplitude: bar.amplitude,
+      turnoverRate: bar.turnoverRate,
+      timestamp: bar.timestamp,
+      code: bar.code,
+      ma: bar.ma || undefined,
+      macd: bar.macd || undefined,
+      boll: bar.boll || undefined,
+      rsi: bar.rsi || undefined,
+      kdj: bar.kdj || undefined,
+    }));
+
+    // Cache the result
+    await this.cache.set(cacheKey, result, config.cacheTTL.dailyKline);
+
+    return result;
+  }
+
+  /**
+   * Get today's intraday timeline data
+   */
+  async getTodayTimeline(code: string): Promise<any> {
+    const normalized = this.normalizeCode(code);
+    return this.sdk.getTodayTimeline(normalized);
+  }
+
+  /**
+   * Get individual stock fund flow (主力资金流向)
+   * 港股可能不支持，返回空数组
+   */
+  async getFundFlow(code: string): Promise<any[]> {
+    const normalized = this.normalizeCode(code);
+    if (normalized.startsWith('hk')) return []; // 港股暂无资金流向数据
+    try {
+      return await this.sdk.getIndividualFundFlow(normalized);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Get a simple stock code list for local search fallback
+   */
+  async getStockCodeList(): Promise<SearchResultItem[]> {
+    if (this.stockListCache) return this.stockListCache;
+
+    const cacheKey = 'stock_code_list';
+    const cached = await this.cache.get<SearchResultItem[]>(cacheKey);
+    if (cached) {
+      this.stockListCache = cached;
+      return cached;
+    }
+
+    try {
+      const codes = await this.sdk.getAShareCodeList();
+      const list = codes.map((c: any) => ({
+        code: c.code.replace(/^(sh|sz|bj)/, ''),
+        name: c.name || '',
+        market: c.market || c.code.match(/^(sh|sz|bj)/)?.[1] || 'sh',
+        type: 'GP-A',
+      }));
+
+      await this.cache.set(cacheKey, list, config.cacheTTL.stockList);
+      this.stockListCache = list;
+      return list;
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Normalize stock code to include market prefix
+   * A股: "600519" -> "sh600519", "000858" -> "sz000858"
+   * 港股: "00700" -> "hk00700", 或已有 "hk" 前缀
+   */
+  private normalizeCode(code: string): string {
+    // Already has prefix
+    if (/^(sh|sz|bj|hk)/.test(code)) return code;
+
+    const codeNum = code.replace(/\D/g, '');
+    const prefix = this.getMarketPrefix(codeNum);
+    return `${prefix}${codeNum}`;
+  }
+
+  private getMarketPrefix(code: string): string {
+    // 港股代码通常为5位数字
+    if (code.length <= 5 && /^\d{1,5}$/.test(code)) return 'hk';
+    // A股：6位数字
+    if (code.startsWith('6')) return 'sh';
+    if (code.startsWith('0') || code.startsWith('3') || code.startsWith('2')) return 'sz';
+    if (code.startsWith('8') || code.startsWith('4')) return 'bj';
+    return 'sh'; // default
+  }
+
+  private async fallbackSearch(keyword: string): Promise<SearchResultItem[]> {
+    const list = await this.getStockCodeList();
+    const kw = keyword.toLowerCase();
+
+    return list.filter(
+      item =>
+        item.code.includes(kw) ||
+        item.name.toLowerCase().includes(kw) ||
+        item.name.includes(kw)
+    ).slice(0, 20);
+  }
+}
+
+export class StockNotFoundError extends Error {
+  constructor(code: string) {
+    super(`Stock not found: ${code}`);
+    this.name = 'StockNotFoundError';
+  }
+}

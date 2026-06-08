@@ -1,0 +1,120 @@
+.page{padding:0 0 24px;background:#f0f2f5;min-height:100vh}
+
+/* ===== 大盘指数条 ===== */
+.idx-bar{display:flex;background:#fff;margin:0 12px 4px;padding:8px 12px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.04);border:1px solid #f0f0f0;overflow-x:auto;gap:4px}
+.idx-item{flex:1;text-align:center;min-width:0}
+.idx-name{display:block;font-size:10px;color:#999;margin-bottom:2px}
+.idx-price{display:block;font-size:14px;font-weight:700}
+.idx-pct{display:block;font-size:11px;font-weight:500}
+.page-center{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:12px;color:#999;font-size:14px}
+.spinner{width:28px;height:28px;border:3px solid #e8e8e8;border-top-color:#1677ff;border-radius:50%;animation:s .7s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+.retry-btn{padding:10px 32px;background:#1677ff;color:#fff;border-radius:8px;font-size:14px;border:none;line-height:1.5}
+.price-up{color:#cf1322}.price-down{color:#3cb371}.price-neutral{color:#555}
+
+/* ===== 卡片 - 浅色主题 ===== */
+.card{background:#fff;border-radius:12px;margin:8px 12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.04);border:1px solid #f0f0f0}
+.ct{font-size:14px;font-weight:600;color:#333;margin-bottom:14px;border-left:3px solid #1677ff;padding-left:10px}
+.ct-sm{font-size:12px;font-weight:500;color:#666;margin-bottom:12px;padding-left:10px;border-left:2px solid #ddd}
+.rw{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10px;line-height:1.6}
+.tag-red{background:#fff2f0;color:#cf1322;border:1px solid #ffccc7}
+.tag-green{background:#f6ffed;color:#3cb371;border:1px solid #b7eb8f}
+.tag-yellow{background:#fffbe6;color:#d48806;border:1px solid #ffe58f}
+.tag-blue{background:#e6f7ff;color:#1677ff;border:1px solid #91d5ff}
+
+/* ===== 概览 ===== */
+.ov-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+.ov-name{font-size:18px;font-weight:700;color:#222}
+.ov-code{font-size:12px;color:#999;margin-left:4px}
+.ov-price{font-size:28px;font-weight:700}
+.ov-change{display:flex;align-items:baseline;gap:12px;margin-bottom:10px}
+.ov-pct{font-size:20px;font-weight:700}
+.ov-chg{font-size:14px}
+.ov-grid{display:flex;flex-wrap:wrap;background:#fafafa;border-radius:8px;padding:10px 4px}
+.ov-grid>view{flex:0 0 25%;text-align:center;padding:3px 0;box-sizing:border-box}
+.ov-lbl{display:block;font-size:10px;color:#999;margin-bottom:2px}
+.ov-val{font-size:13px;font-weight:500;color:#333;display:block}
+.ov-item{flex:1;text-align:center}
+.ov-item .ov-val{font-size:13px}
+
+/* ===== 建仓建议 ===== */
+.sig-badge{display:inline-block;padding:4px 14px;border-radius:6px;font-size:13px;font-weight:700}
+.sig-SBUY{background:#fff2f0;color:#cf1322;border:1px solid #ffccc7}
+.sig-BUY{background:#fff2f0;color:#f5222d;border:1px solid #ffccc7}
+.sig-HOLD{background:#fffbe6;color:#d48806;border:1px solid #ffe58f}
+.sig-SELL{background:#f6ffed;color:#389e0d;border:1px solid #b7eb8f}
+.sig-SSELL{background:#f6ffed;color:#3cb371;border:1px solid #b7eb8f}
+.sr-box{flex:1;text-align:center;padding:8px;background:#fafafa;border-radius:8px}
+.sr-lbl{font-size:11px;color:#999;display:block;margin-bottom:4px}
+.sr-up{font-size:18px;font-weight:700;color:#cf1322}
+.sr-dn{font-size:18px;font-weight:700;color:#3cb371}
+
+/* ===== 专业信号 ===== */
+.sig-row{display:flex;align-items:flex-start;gap:8px;padding:8px 4px;border-bottom:1px solid #f5f5f5}
+.sig-row:last-child{border:none}
+.sig-icon{width:22px;text-align:center;font-size:13px}
+.sig-tit{font-size:13px;color:#333;display:block;line-height:1.5}
+.sig-desc{font-size:11px;color:#999;display:block;margin-top:1px;line-height:1.5}
+.sig-tag{display:inline-block;padding:0 6px;border-radius:3px;font-size:10px;margin-right:4px}
+.sig-tag-red{background:#fff2f0;color:#cf1322}
+.sig-tag-green{background:#f6ffed;color:#3cb371}
+
+/* ===== 资金流向 ===== */
+.fw-chart{display:flex;align-items:flex-end;height:44px;gap:1px;margin:4px 0}
+.fw-bar{flex:1;min-height:2px;border-radius:1px}
+
+/* ===== 图表公用 ===== */
+.ch{position:relative;height:90px;display:flex;align-items:flex-end;gap:1px;padding:4px 0}
+.ch-bar{flex:1;min-height:2px;border-radius:1px}
+.rsi-70,.rsi-30{position:absolute;left:0;right:0}
+.rsi-70{top:16%;border-top:1px dashed rgba(255,77,79,.25)}
+.rsi-30{top:68%;border-top:1px dashed rgba(82,196,26,.25)}
+.rsi-bar{flex:1;min-height:2px;border-radius:1px}
+.kj-bar{flex:1;min-height:2px;border-radius:1px;position:absolute}
+.ch-lbl{font-size:11px;color:#999;margin-top:4px}
+
+/* ===== 技术指标 ===== */
+.ind-row{display:flex;align-items:center;padding:7px 0;border-bottom:1px solid #f5f5f5}
+.ind-row:last-child{border:none}
+.ind-nm{font-size:13px;color:#333;display:block;margin-bottom:3px}
+.bar-bg{height:3px;background:#f0f0f0;border-radius:2px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px}
+.bar-up{background:#cf1322}.bar-down{background:#3cb371}
+
+/* ===== 信号详情 ===== */
+.sig-detail{font-size:12px;color:#666;padding:6px 0;border-bottom:1px solid #f5f5f5;line-height:1.6}
+.sig-detail:last-child{border:none}
+
+/* ===== K线 ===== */
+.kl-ch{display:flex;align-items:flex-end;height:50px;gap:1px;margin:6px 0}
+.kl-bar{flex:1;min-height:2px;border-radius:1px}
+.tl-bar{flex:1;min-height:3px;border-radius:1px 1px 0 0}
+
+/* ===== 复盘 ===== */
+.rc-lines{margin-top:4px}
+.rc-line{font-size:13px;color:#555;padding:5px 0;border-bottom:1px solid #f5f5f5;line-height:1.7}
+.rc-line:last-child{border:none}
+.rc-title{font-size:11px;font-weight:600;color:#999;margin:10px 0 6px;padding-left:6px;border-left:2px solid #ddd}
+
+/* ===== 止损止盈 ===== */
+.sl-card{flex:1;padding:12px 10px;border-radius:8px;text-align:center;margin-top:6px}
+.sl-stop{background:#f6ffed;border:1px solid #b7eb8f;margin-right:6px}
+.sl-profit{background:#fff2f0;border:1px solid #ffccc7;margin-left:6px}
+.sl-icon{font-size:16px;display:block;margin-bottom:2px}
+.sl-up{font-size:18px;font-weight:700;color:#cf1322;display:block;margin:3px 0}
+.sl-dn{font-size:18px;font-weight:700;color:#3cb371;display:block;margin:3px 0}
+.sl-rs{font-size:11px;color:#999;display:block}
+
+/* ===== 诊断 ===== */
+.diag-inp{flex:1;height:36px;border:1px solid #d9d9d9;border-radius:6px;padding:0 10px;font-size:14px;background:#fff}
+.diag-btn{padding:8px 20px;background:#1677ff;color:#fff;border-radius:6px;font-size:13px;border:none;line-height:1.5}
+.diag-box{margin-top:12px;padding:12px;background:#fafafa;border-radius:8px}
+.rate-box{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:700;border:2px solid;display:inline-block}
+.rate-excellent{border-color:#cf1322;color:#cf1322}
+.rate-good{border-color:#f5222d;color:#f5222d}
+.rate-neutral{border-color:#d48806;color:#d48806}
+.rate-risky{border-color:#3cb371;color:#3cb371}
+.rate-bad{border-color:#389e0d;color:#389e0d}
+.diag-num{font-size:20px;font-weight:700;display:block}
+.diag-lbl{font-size:10px;color:#999;display:block;margin-top:1px}
