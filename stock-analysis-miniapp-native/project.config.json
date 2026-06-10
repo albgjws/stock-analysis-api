@@ -2,7 +2,7 @@
   "miniprogramRoot": "./",
   "projectname": "A股分析工具",
   "description": "A股技术分析",
-  "appid": "wx9339dac9cc9695f5",
+  "appid": "wx2360dc5d6c989bdc",
   "setting": {
     "urlCheck": false,
     "es6": true,
@@ -34,5 +34,6 @@
     "ignore": [],
     "include": []
   },
-  "editorSetting": {}
+  "editorSetting": {},
+  "libVersion": "3.16.1"
 }

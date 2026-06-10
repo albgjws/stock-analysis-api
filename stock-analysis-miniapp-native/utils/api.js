@@ -1,5 +1,5 @@
-// 后端 API 地址 — 发布时改成你的线上域名
-const BASE_URL = 'http://192.168.5.187:3003/api/stock';
+// 后端 API 地址 — 发布时改成 HTTPS 域名
+const BASE_URL = 'http://47.97.6.167/api/stock';
 
 function request(url) {
   return new Promise((resolve, reject) => {

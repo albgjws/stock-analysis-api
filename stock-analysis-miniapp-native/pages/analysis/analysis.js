@@ -280,7 +280,7 @@ Page({
     var p=parseFloat(this.data.buyVal);if(!p||p<=0){wx.showToast({title:'请输入有效价格',icon:'none'});return}
     var me=this;
     wx.request({
-      url:'http://192.168.5.187:3003/api/stock/'+this.data.code+'/purchase-analysis?buyPrice='+p,
+      url:'http://47.97.6.167/api/stock/'+this.data.code+'/purchase-analysis?buyPrice='+p,
       success:function(r){
         if(r.statusCode===200){
           var d=r.data;

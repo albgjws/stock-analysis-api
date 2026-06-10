@@ -1,109 +1,109 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+本文件指导 Claude Code（claude.ai/code）在此仓库中工作。
 
-## Project Overview
+## 项目概述
 
-A股分析工具 — A-share stock analysis web app with WeChat Mini Program companion. Users search stocks, view K-line charts with technical indicators, get ARIMA predictions, multi-indicator buy/sell signals, intraday charts, fund flow analysis, and market recaps.
+A股分析工具 — A股技术分析网页应用 + 微信小程序版。用户搜索股票代码/名称，查看K线图及技术指标（MA/MACD/RSI/KDJ/布林带），ARIMA价格预测，多指标买卖信号，分时走势，主力资金流向，以及市场复盘分析。
 
-## Commands
+## 常用命令
 
 ```bash
-# Install dependencies
+# 安装依赖
 cd stock-analysis-app && npm install
 
-# Start dev environment (server on :3003, client on :5174, concurrently)
+# 启动开发环境（服务器:3003 + 客户端:5174，并行启动）
 npm run dev
 
-# Start server only
+# 仅启动服务端
 npm run dev:server
 
-# Start client only
+# 仅启动客户端
 npm run dev:client
 
-# Build for production
+# 生产构建
 npm run build
 
-# Start production server (serves built frontend)
+# 启动生产服务（提供前端静态文件）
 npm start
 ```
 
-The WeChat Mini Program (`stock-analysis-miniapp-native/`) has no build step — upload directly via WeChat DevTools.
+微信小程序（`stock-analysis-miniapp-native/`）无需构建步骤，直接通过微信开发者工具上传。
 
-## Server Architecture
+## 后端架构
 
-**Entry:** `server/index.ts` — Express app mounts routes under `/api/stock`.
+**入口:** `server/index.ts` — Express 应用，路由挂载在 `/api/stock` 下。
 
-**Routes** (all in `server/routes/analysisRoutes.ts` except search in `stockRoutes.ts`):
-- `GET /search?q=` — Stock search
-- `GET /:code/analysis?count=200&predictDays=10` — Full analysis (info + kline + prediction + signals), cached 1h
-- `GET /:code/intraday` — Today's price timeline
-- `GET /:code/quote` — Lightweight real-time quote (polled every 5s)
-- `GET /:code/fund-flow` — Main force capital flow
-- `GET /:code/purchase-analysis?buyPrice=` — Purchase price diagnosis
-- `GET /:code/backtest` — Prediction backtest comparison
-- `GET /indices` — Market indices (上证, 深证, 创业板, 科创50, 沪深300)
+**路由**（搜索在 `stockRoutes.ts`，其余在 `analysisRoutes.ts`）:
+- `GET /search?q=` — 股票搜索
+- `GET /:code/analysis?count=200&predictDays=10` — 完整分析（信息 + K线 + 预测 + 信号），缓存1小时
+- `GET /:code/intraday` — 当日分时数据
+- `GET /:code/quote` — 轻量实时行情（每5秒轮询）
+- `GET /:code/fund-flow` — 主力资金流向
+- `GET /:code/purchase-analysis?buyPrice=` — 买入价诊断
+- `GET /:code/backtest` — 预测回测对比
+- `GET /indices` — 大盘指数（上证、深证、创业板、科创50、沪深300）
 
-**Key Services** (`server/services/`):
+**核心服务**（`server/services/`）:
 
-| Service | Purpose |
+| 服务 | 功能 |
 |---|---|
-| `StockDataService` | Search, real-time quotes, K-line (4 fallback strategies: stock-sdk → stock-sdk no-indicators → raw history → Tencent fqkline API), fund flow. Normalizes codes with market prefix (`sh`/`sz`/`bj`/`hk`). |
-| `PredictionService` | ARIMA time series prediction with SMA fallback |
-| `SignalService` | Multi-indicator weighted scoring → STRONG_BUY/BUY/HOLD/SELL/STRONG_SELL |
-| `CacheService` | Two-tier: in-memory (node-cache) + JSON file cache in `data/` |
-| `MarketContextService` | Market-level context (sectors, indices, fund flow) |
-| `PredictionHistoryService` | Saves predictions to disk, runs backtest comparisons |
-| `PredictionCorrectionService` | Adjusts ARIMA drift/volatility by market regime |
+| `StockDataService` | 搜索、实时行情、K线（4级降级策略：stock-sdk → 无指标 → 原始K线 → 腾讯fqkline API）、资金流向。自动标准化代码前缀（`sh`/`sz`/`bj`/`hk`）。 |
+| `PredictionService` | ARIMA时间序列预测，SMA降级兜底 |
+| `SignalService` | 多指标加权评分 → STRONG_BUY/BUY/HOLD/SELL/STRONG_SELL |
+| `CacheService` | 双层缓存：内存（node-cache）+ JSON文件缓存到 `data/` 目录 |
+| `MarketContextService` | 市场级别上下文（板块、指数、资金流向） |
+| `PredictionHistoryService` | 保存预测记录到磁盘，运行回测对比 |
+| `PredictionCorrectionService` | 根据市场状态调整ARIMA漂移/波动系数 |
 
-**Caching:** `CacheService` writes to `data/*.json` with configurable TTL. Analysis results cache 1h. To force refresh, delete `data/*.json` files and restart server.
+**缓存:** `CacheService` 写入 `data/*.json`，TTL可配置。分析结果缓存1小时。如需强制刷新，删除 `data/*.json` 后重启服务。
 
-## Frontend Architecture
+## 前端架构
 
-**Entry:** `src/main.tsx` → React 18 + react-router-dom + Ant Design (zh_CN)
+**入口:** `src/main.tsx` → React 18 + react-router-dom + Ant Design（中文）
 
-**App shell:** `Layout.tsx` — sticky header with index ticker + "A股分析工具" branding, tabbed content area, footer. Market index ticker polls every 30s during trading hours.
+**应用壳:** `Layout.tsx` — 固定顶部导航栏（大盘指数 + "A股分析工具"标题）、标签页内容区、底部免责声明。大盘指数每30秒轮询一次（仅交易时段）。
 
-**Tab system:** `TabContext.tsx` manages multi-stock tabs with drag-reorder. Each stock analysis is a tab.
+**标签系统:** `TabContext.tsx` 管理多只股票标签，支持拖拽排序。每只股票的分析是一个标签。
 
-**Key components** (`src/components/`):
-- `StockOverview` — Real-time price, change, OHLC, volume, turnover rate (colors: red for up, green for down)
-- `IntradayChart` — ECharts line: price + avg + volume + signal markers
-- `KlineChart` — ECharts candlestick: MA5/10/20/60, Bollinger, signals, TD9, swing, fund flow
-- `IndicatorCharts` — MACD + RSI(6) + KDJ mini charts in a row
-- `PredictionChart` — Last 30 prices + ARIMA forecast with confidence bands
-- `SignalPanel` — Overall signal + detail table + support/resistance
-- `MarketRecap` — AI-generated text recap (5 collapsible sections)
-- `PositionAdvice` — Tiny badge based on signal
-- `BacktestReport` — Prediction accuracy metrics
-- `PurchaseAnalysis` — Price diagnosis tool
+**关键组件**（`src/components/`）:
+- `StockOverview` — 实时价格、涨跌幅、高开低收、成交量、换手率（红涨绿跌）
+- `IntradayChart` — ECharts折线图：价格 + 均价 + 成交量 + 买卖信号标记
+- `KlineChart` — ECharts K线图：MA5/10/20/60、布林带、买卖信号、神奇九转、波段点、资金流向
+- `IndicatorCharts` — MACD + RSI(6) + KDJ 三行迷你图表
+- `PredictionChart` — 最近30天价格 + ARIMA预测 + 置信区间
+- `SignalPanel` — 综合信号 + 详情表格 + 支撑/阻力位
+- `MarketRecap` — 自动生成的文字复盘（5个可折叠板块）
+- `PositionAdvice` — 基于信号的建仓/减仓小徽章
+- `BacktestReport` — 预测准确度指标
+- `PurchaseAnalysis` — 买入价诊断工具
 
-**Pages** (`src/pages/`):
-- `HomePage` — Search bar + feature cards
-- `AnalysisPage` — Orchestrates all components. Polls: quote (5s), intraday (15s), fund flow (60s). Merges live quote into `liveInfo` for real-time price updates.
+**页面**（`src/pages/`）:
+- `HomePage` — 搜索栏 + 功能卡片
+- `AnalysisPage` — 组装所有组件。轮询：行情（5秒）、分时（15秒）、资金流向（60秒）。合并实时行情到 `liveInfo` 实现价格实时更新。
 
-**Polling:** `usePolling` hook in `src/hooks/usePolling.ts` — only runs during trading hours (weekdays 9:30-11:30, 13:00-15:00) and when page is visible.
+**轮询:** `usePolling` hook（`src/hooks/usePolling.ts`）— 仅在交易时段（工作日 9:30-11:30、13:00-15:00）且页面可见时运行。
 
-**Advanced indicators** (`src/utils/`):
-- `marketRecap.ts` — Generates full text recap from data
-- `advancedIndicators.ts` — Three locks, TD Sequential, swing points, bull/bear gauge
+**高级指标工具**（`src/utils/`）:
+- `marketRecap.ts` — 从数据生成完整文字复盘
+- `advancedIndicators.ts` — 三把锁、TD Sequential、波段买卖点、多空力量对比
 
-## WeChat Mini Program
+## 微信小程序
 
-`stock-analysis-miniapp-native/` — Native WXML/WXSS/JS format, no build step.
+`stock-analysis-miniapp-native/` — 原生 WXML/WXSS/JS 格式，无构建步骤。
 
-- `utils/api.js` — Calls same backend endpoints via `wx.request`
-- `pages/index/index` — Search + history
-- `pages/analysis/analysis` — Single page mirroring the PC analysis view. JS is minified-style. Polls: quote (5s), intraday (15s), indices (30s) during trading hours.
+- `utils/api.js` — 通过 `wx.request` 调用后端接口
+- `pages/index/index` — 搜索 + 历史记录
+- `pages/analysis/analysis` — 单页完整分析视图，对标PC端。JS代码为压缩风格。数据类型/价格、分时、指数字段以此轮询（5秒/15秒/30秒），仅交易时段运行。
 
-**Critical rule: Mini Program WXML `{{}}` cannot call `.toFixed()` etc. — format all data in JS before `setData`.**
+**重要规则：小程序 WXML 的 `{{}}` 中不能调用 `.toFixed()` 等方法 — 所有数据在 JS 中格式化好后再 `setData`。**
 
-## Important Patterns
+## 重要模式
 
-- **API changes must be synced to both PC and Mini Program** — same backend serves both
-- **Stock code normalization:** `StockDataService.normalizeCode()` adds market prefix (600519→sh600519, 000858→sz000858, 00700→hk00700)
-- **Turnover rate formula:** `volume_shares / ((marketCap * 100000000) / price) * 100` (marketCap from stock-sdk is in 亿)
-- **Volume units:** K-line from Tencent API returns 手 (×100 for shares), intraday timeline returns 股 (actual shares)
-- **Color convention:** 涨=红(`#cf1322`), 跌=绿(`#3cb371`)
-- **All components handle:** loading, error (with retry), empty, and 404 states
-- **Deprecation warning fix:** Ant Design v5 — use `styles={{ body: {...} }}` instead of `bodyStyle`, `styles={{ root: {...} }}` instead of `overlayStyle`
+- **API 改动必须同步到 PC 和小程序两端** — 同一个后端服务支撑两端
+- **股票代码标准化:** `StockDataService.normalizeCode()` 自动添加市场前缀（600519→sh600519, 000858→sz000858, 00700→hk00700）
+- **换手率公式:** `volume_shares / ((marketCap * 100000000) / price) * 100`（stock-sdk 的 marketCap 单位为"亿"）
+- **成交量单位:** 腾讯 API K线返回"手"（×100得股数），分时返回"股"（直接用）
+- **颜色规则:** 涨=红（`#cf1322`）、跌=绿（`#3cb371`）
+- **状态覆盖:** 所有组件需处理：加载中、错误（带重试）、空数据、404 四种状态
+- **Ant Design v5 兼容:** 使用 `styles={{ body: {...} }}` 替代 `bodyStyle`，`styles={{ root: {...} }}` 替代 `overlayStyle`
