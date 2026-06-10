@@ -61,7 +61,7 @@ async function main() {
   initDB(db);
   console.log('✅ 连上 SQLite');
 
-  const sdk = require('stock-sdk');
+  const sdk = new (require('stock-sdk').StockSDK)();
 
   const insKline = db.prepare(`INSERT OR REPLACE INTO kline_cache
     (code, trade_date, period, open_price, close_price, high_price, low_price, volume, amount,
