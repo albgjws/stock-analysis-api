@@ -1,5 +1,4 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import fs from 'fs';
 import { StockDataService, StockNotFoundError } from '../services/stockDataService';
 import { PredictionService } from '../services/predictionService';
 import { SignalService } from '../services/signalService';
@@ -116,9 +115,6 @@ router.get('/:code/analysis', async (req: Request, res: Response, next: NextFunc
   );
 
   const cacheKey = `analysis_${code}_${count}_${predictDays}`;
-
-  // 追踪今日查询的股票（收盘后存数据库用）
-  try { fs.appendFileSync('/root/stock-analysis-api/stock-analysis-app/data/tracked_codes.json', JSON.stringify({code,time:new Date().toISOString()})+'\n'); } catch(e){}
 
   try {
     // Check if analysis is cached
