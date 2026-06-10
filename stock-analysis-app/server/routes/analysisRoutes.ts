@@ -117,7 +117,7 @@ router.get('/:code/analysis', async (req: Request, res: Response, next: NextFunc
   const cacheKey = `analysis_${code}_${count}_${predictDays}`;
 
   // 追踪今日查询的股票（收盘后存数据库用）
-  try { require('../utils/tracker.cjs').track(code); } catch(e){}
+  try { require('fs').appendFileSync('/root/stock-analysis-api/stock-analysis-app/data/tracked_codes.json', JSON.stringify({code,time:new Date().toISOString()})+'\n'); } catch(e){}
 
   try {
     // Check if analysis is cached
