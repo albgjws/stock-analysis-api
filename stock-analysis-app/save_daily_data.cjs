@@ -77,7 +77,7 @@ async function main() {
   for (const code of codes) {
     try {
       console.log('\n📈', code, '...');
-      const kline = await sdk.getKlineWithIndicators({ code, count: 200 });
+      const kline = await sdk.getKlineWithIndicators(code, { count: 200 });
       if (!kline || !kline.length) { console.log('   ⚠️ 无数据'); continue; }
 
       const insBatch = db.transaction((rows) => {
