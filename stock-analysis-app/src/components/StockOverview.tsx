@@ -39,12 +39,12 @@ export default function StockOverview({ info }: StockOverviewProps) {
               </Space>
               <div style={{ marginTop: 4, display: 'flex', alignItems: 'baseline', gap: 12 }}>
                 <span style={{ fontSize: 32, fontWeight: 700, color: c }}>{formatPrice(info.price)}</span>
-                <span style={{ fontSize: 18, fontWeight: 600, color: c }}>
+                <span style={{ fontSize: 16, color: c }}>
                   {isUp ? <ArrowUpOutlined /> : isDown ? <ArrowDownOutlined /> : <MinusOutlined />}
-                  {info.changePercent >= 0 ? '+' : ''}{info.changePercent.toFixed(2)}%
-                </span>
-                <span style={{ fontSize: 14, color: c }}>
                   {info.change >= 0 ? '+' : ''}{info.change.toFixed(2)}
+                </span>
+                <span style={{ fontSize: 22, fontWeight: 700, color: c }}>
+                  {info.changePercent >= 0 ? '+' : ''}{info.changePercent.toFixed(2)}%
                 </span>
               </div>
             </div>

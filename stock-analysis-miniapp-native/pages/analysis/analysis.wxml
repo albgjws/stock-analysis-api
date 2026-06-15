@@ -35,8 +35,8 @@
         </view>
       </view>
       <view class="ov-change">
+        <text class="ov-chg price-{{cc}}">{{chgText}}</text>
         <text class="ov-pct price-{{cc}}">{{cpText}}</text>
-        <text class="ov-chg price-{{cc}}">涨跌 {{chgText}}</text>
       </view>
       <view class="ov-grid">
         <view><text class="ov-lbl">最高</text><text class="ov-val price-up" style="font-weight:600;">{{hiText}}</text></view>
@@ -59,6 +59,32 @@
       <view class="rw" style="margin-top:10px;">
         <view class="sr-box"><text class="sr-lbl">🛡️ 支撑位</text><text class="sr-dn">{{supText}}</text></view>
         <view class="sr-box"><text class="sr-lbl">🎯 阻力位</text><text class="sr-up">{{resText}}</text></view>
+      </view>
+    </view>
+
+    <!-- ===== 涨停/跌停连板预测 ===== -->
+    <view wx:if="{{hasLimitPred}}" class="card" style="background:{{limitPred.isUp?'#fff2f0':'#f6ffed'}};border:1rpx solid {{limitPred.isUp?'#ff4d4f':'#52c41a'}}40;">
+      <view style="display:flex;align-items:center;justify-content:space-between;">
+        <view style="display:flex;align-items:center;gap:8rpx;">
+          <text style="font-size:36rpx;">{{limitPred.isUp?'🚀':'💥'}}</text>
+          <view>
+            <view style="display:flex;align-items:center;gap:6rpx;">
+              <text class="tag-{{limitPred.isUp?'red':'green'}}" style="font-size:26rpx;font-weight:700;padding:2rpx 16rpx;border-radius:6rpx;color:#fff;background:{{limitPred.isUp?'#cf1322':'#3cb371'}};">
+                {{limitPred.isUp?'涨停':'跌停'}}
+              </text>
+              <text class="tag-{{limitPred.isUp?'volcano':'cyan'}}" style="font-size:24rpx;padding:2rpx 12rpx;border-radius:6rpx;color:{{limitPred.isUp?'#d4380d':'#13a8a8'}};background:{{limitPred.isUp?'#fff2e8':'#e6fffb'}};">
+                {{limitPred.consecutiveCount}}连{{limitPred.isUp?'板':'跌'}}
+              </text>
+            </view>
+            <text style="font-size:22rpx;color:#999;margin-top:4rpx;display:block;">明{{limitPred.isUp?'日连板':'继续跌停'}}概率 {{limitPred.nextDayProb}}%</text>
+          </view>
+        </view>
+        <view style="width:120rpx;height:120rpx;border-radius:50%;border:6rpx solid {{limitPred.isUp?'#cf1322':'#3cb371'}};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <text style="font-size:36rpx;font-weight:700;color:{{limitPred.isUp?'#cf1322':'#3cb371'}};">{{limitPred.nextDayProb}}%</text>
+        </view>
+      </view>
+      <view wx:if="{{limitPred.factors&&limitPred.factors.length}}" style="margin-top:12rpx;padding-top:8rpx;border-top:2rpx dashed #e8e8e8;display:flex;flex-wrap:wrap;gap:6rpx;">
+        <text wx:for="{{limitPred.factors}}" wx:key="*this" style="font-size:20rpx;padding:2rpx 12rpx;border-radius:4rpx;border:1rpx solid {{limitPred.isUp?'#ffa39e':'#b7eb8f'}};color:{{limitPred.isUp?'#cf1322':'#3cb371'}};">{{item}}</text>
       </view>
     </view>
 

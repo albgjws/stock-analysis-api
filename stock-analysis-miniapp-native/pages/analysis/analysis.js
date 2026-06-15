@@ -15,7 +15,7 @@ Page({
     sig:null,sigLabel:'',sigClsName:'',ssc:'neutral',sigStrengthText:'',
     supText:'',resText:'',
 
-    threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,dualCross:[],hasDualCross:0,
+    threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,dualCross:[],hasDualCross:0,limitPred:null,hasLimitPred:0,
     ffData:[],ffLatest:'',ffCount:0,
 
     macdBars:[],macdSummary:'',macdDif:'',macdDea:'',macdBarVal:'',macdBarCls:'neutral',
@@ -133,6 +133,39 @@ Page({
       }
     }
 
+    // 涨停/跌停连板预测
+    var lp=null;
+    var chPct=info.changePercent||0;
+    var isST=(info.name||'').indexOf('ST')>=0;
+    var limitPct=isST?4.8:9.6;
+    if(chPct>=limitPct||chPct<=-limitPct){
+      var isUp=chPct>=limitPct;
+      var avgVol=0;for(var i=Math.max(0,kl.length-20);i<kl.length;i++)avgVol+=kl[i].volume;
+      avgVol=avgVol/Math.min(20,kl.length);
+      var volRate=avgVol>0?((info.volume||0)/avgVol):1;
+      // 计算连板数
+      var lc=1;
+      for(var i=kl.length-2;i>=0&&i>=kl.length-6;i--){
+        var b=kl[i],p2=i>0?kl[i-1]:null;
+        if(p2&&p2.close>0){var pct2=(b.close-p2.close)/p2.close*100;if(isUp&&pct2>=limitPct-1)lc++;else if(!isUp&&pct2<=-(limitPct-1))lc++;else break;}
+        else break;
+      }
+      // 概率计算
+      var prob=50,facts=[];
+      if(isUp){
+        if(volRate<0.5){prob+=20;facts.push('缩量封板');}else if(volRate<0.8){prob+=10;facts.push('量能适中');}else if(volRate>1.2){prob-=10;facts.push('放量分歧');}
+      }else{
+        if(volRate<0.5){prob+=5;facts.push('缩量跌停');}else{prob+=10;facts.push('放量跌停');}
+      }
+      var mcap=info.marketCap||0;
+      if(mcap>0){if(mcap<30){prob+=15;facts.push('小盘');}else if(mcap<80){prob+=8;}else if(mcap>200){prob-=10;facts.push('大盘');}}
+      if(lc===1){prob+=10;facts.push('首板');}else if(lc===2){prob+=5;}else if(lc===3){prob-=5;}else{prob-=Math.min(20,lc*5);facts.push(lc+'板高位');}
+      var jVal=kl[kl.length-1]&&kl[kl.length-1].kdj?kl[kl.length-1].kdj.j:null;
+      if(jVal!=null&&isUp){if(jVal<60){prob+=10;}else if(jVal<80){prob+=5;}else{prob-=10;}}
+      prob=Math.max(5,Math.min(95,prob));
+      lp={isUp:isUp?1:0,consecutiveCount:lc,nextDayProb:prob,factors:facts};
+    }
+
     // 资金流向
     var ffD=ff.slice(-30).map(function(f){return{h:Math.abs(f.mainNetInflowPercent||0)*2,c:(f.mainNetInflowPercent||0)>=0?'#cf1322':'#3cb371'}});
     var ffL=ff.length>0?$(ff[ff.length-1].mainNetInflowPercent):'';
@@ -197,6 +230,7 @@ Page({
       tdSeq:td.slice(-10),hasTd:td.length>0?1:0,
       swingPts:sw.slice(-3),hasSwing:sw.length>0?1:0,
       dualCross:dc,hasDualCross:dc.length>0?1:0,
+      limitPred:lp,hasLimitPred:lp?1:0,
       ffData:ffD,ffLatest:ffL,ffCount:ffD.length,
 
       macdBars:mb,macdSummary:(lm.dif?'· '+(lm.dif>lm.dea?'多头':'空头'):''),

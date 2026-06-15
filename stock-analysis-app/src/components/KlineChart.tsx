@@ -193,6 +193,42 @@ export default function KlineChart({
           params.forEach((p: any) => {
             if (p.seriesName.startsWith('MA') && p.value != null) html += `<div>${p.seriesName}: <b>${Number(p.value).toFixed(2)}</b></div>`;
           });
+          // 技术指标
+          if (d.macd) {
+            html += `<div style="border-top:1px solid #eee;margin:4px 0 2px;font-size:11px;color:#999;">MACD</div>`;
+            html += `<div><span style="color:#1677ff">DIF</span>: <b>${d.macd.dif.toFixed(2)}</b> | <span style="color:#faad14">DEA</span>: <b>${d.macd.dea.toFixed(2)}</b> | MACD: <b style="color:${d.macd.macd >= 0 ? '#cf1322' : '#3cb371'}">${d.macd.macd.toFixed(2)}</b></div>`;
+          }
+          if (d.rsi?.rsi6 != null) {
+            html += `<div>RSI(6): <b style="color:${d.rsi.rsi6 > 70 ? '#cf1322' : d.rsi.rsi6 < 30 ? '#3cb371' : '#722ed1'}">${d.rsi.rsi6.toFixed(1)}</b>`;
+            if (d.rsi.rsi14 != null) html += ` | RSI(14): <b>${d.rsi.rsi14.toFixed(1)}</b>`;
+            html += `</div>`;
+          }
+          if (d.kdj) {
+            html += `<div><span style="color:#1677ff">K</span>: <b>${d.kdj.k.toFixed(1)}</b> | <span style="color:#faad14">D</span>: <b>${d.kdj.d.toFixed(1)}</b> | <span style="color:#ff4d4f">J</span>: <b>${d.kdj.j.toFixed(1)}</b></div>`;
+          }
+          // 信号标记提示
+          const idx = cs.dataIndex;
+          const sigLines: string[] = [];
+          if (advancedSignals) {
+            advancedSignals.threeLocks.filter(l => l.index === idx).forEach(l => {
+              sigLines.push(`🔒 <b>三把锁${l.type === 'buy' ? '买入' : '卖出'}（${l.lockCount}/3）</b>`);
+            });
+            advancedSignals.tdSequential.filter(t => t.index === idx).forEach(t => {
+              const isUp = t.count > 0;
+              sigLines.push(`🔢 神奇九转：<b>${isUp ? '上涨' : '下跌'} ${Math.abs(t.count)}</b>${t.isReversal ? ' ⚠️9转预警' : ''}`);
+            });
+            advancedSignals.swingPoints.filter(s => s.index === idx).forEach(s => {
+              sigLines.push(`<span style="color:${s.type === 'buy' ? '#cf1322' : '#3cb371'}">${s.type === 'buy' ? '▲' : '▼'}</span> <b>波段${s.type === 'buy' ? '买入' : '卖出'}</b>：${s.reason}`);
+            });
+            advancedSignals.dualGoldenCross.filter(d => d.index === idx).forEach(d => {
+              const isG = d.type === 'golden';
+              sigLines.push(`<span style="color:${isG ? '#cf1322' : '#3cb371'}">${isG ? '↑↑' : '↓↓'}</span> <b>${isG ? '双金叉' : '双死叉'}</b>（强度${d.strength}）`);
+            });
+          }
+          if (sigLines.length > 0) {
+            html += `<div style="border-top:1px solid #eee;margin:4px 0 2px;font-size:11px;color:#999;">信号标记</div>`;
+            sigLines.forEach(l => { html += `<div>${l}</div>`; });
+          }
           return html;
         },
       },

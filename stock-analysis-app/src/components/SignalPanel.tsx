@@ -33,7 +33,7 @@ export default function SignalPanel({ signals }: SignalPanelProps) {
       key: 'signal',
       width: 80,
       render: (signal: string) => {
-        const color = signal === 'BUY' ? '#52c41a' : signal === 'SELL' ? '#ff4d4f' : '#999';
+        const color = signal === 'BUY' ? '#cf1322' : signal === 'SELL' ? '#3cb371' : '#999';
         const icon = signal === 'BUY' ? <ArrowUpOutlined /> : signal === 'SELL' ? <ArrowDownOutlined /> : <MinusOutlined />;
         return (
           <span style={{ color }}>
@@ -48,7 +48,7 @@ export default function SignalPanel({ signals }: SignalPanelProps) {
       key: 'score',
       width: 70,
       render: (score: number) => (
-        <span style={{ color: score > 0 ? '#52c41a' : score < 0 ? '#ff4d4f' : '#999', fontWeight: 600 }}>
+        <span style={{ color: score > 0 ? '#cf1322' : score < 0 ? '#3cb371' : '#999', fontWeight: 600 }}>
           {score > 0 ? '+' : ''}{score}
         </span>
       ),
@@ -93,15 +93,15 @@ export default function SignalPanel({ signals }: SignalPanelProps) {
               padding: '8px 24px',
               borderRadius: 8,
               border: '2px solid',
-              ...(isBuy ? { borderColor: '#52c41a', color: '#52c41a' } :
-                  isSell ? { borderColor: '#ff4d4f', color: '#ff4d4f' } :
+              ...(isBuy ? { borderColor: '#cf1322', color: '#cf1322' } :
+                  isSell ? { borderColor: '#3cb371', color: '#3cb371' } :
                   { borderColor: '#faad14', color: '#faad14' }),
             }}
           >
             {signalLabel}
           </div>
           <div style={{ marginTop: 8, fontSize: 14, color: '#666' }}>
-            综合强度: <b style={{ color: isBuy ? '#52c41a' : isSell ? '#ff4d4f' : '#faad14' }}>
+            综合强度: <b style={{ color: isBuy ? '#cf1322' : isSell ? '#3cb371' : '#faad14' }}>
               {signals.strength > 0 ? '+' : ''}{signals.strength}
             </b>
           </div>

@@ -564,6 +564,124 @@ export function calcDualGoldenCross(kline: KlineBar[]): DualGoldenCross[] {
   return signals;
 }
 
+// ---------- 涨停/跌停连板预测 ----------
+export interface LimitPrediction {
+  isLimitUp: boolean;           // 是否涨停
+  isLimitDown: boolean;         // 是否跌停
+  consecutiveCount: number;     // 当前已连板数
+  nextDayProb: number;          // 明日连板概率 0-100
+  nextDayTrend: 'up' | 'down' | 'sideways';
+  analysis: string;             // 分析文字
+  factors: string[];            // 影响因素
+}
+
+/**
+ * 涨停/跌停连板概率预测
+ *
+ * 涨停检测：涨幅≥9.6%（非ST） 或 涨幅≥4.8%（ST）
+ * 跌停检测：跌幅≤-9.6%（非ST） 或 跌幅≤-4.8%（ST）
+ *
+ * 连板概率考虑因素：
+ *   1. 今日封板强度（成交量越小 → 封板越强）
+ *   2. 流通市值（越小越容易连板）
+ *   3. 当前连板位置（1板成功率最高）
+ *   4. 技术指标位置（KDJ/RSI空间）
+ */
+export function calcLimitPrediction(kline: KlineBar[], info: { price: number; changePercent: number; volume: number; marketCap: number; prevClose?: number }): LimitPrediction | null {
+  if (!kline || kline.length < 5) return null;
+
+  const chgPct = info.changePercent;
+  // changePercent 可能为百分比(10.0)或小数(0.10)，统一处理
+  const absChg = Math.abs(chgPct);
+  const normalizedPct = absChg > 1 ? chgPct : chgPct * 100;
+  const isST = (info as any).name?.includes('ST') || false;
+
+  // 涨停/跌停阈值
+  const limitPct = isST ? 4.8 : 9.6;
+  const isLimitUp = normalizedPct >= limitPct;
+  const isLimitDown = normalizedPct <= -limitPct;
+
+  if (!isLimitUp && !isLimitDown) return null;
+
+  // 计算成交量比率（今日量 / 20日均量）
+  const recentVols = kline.slice(-20).map(b => b.volume);
+  const avgVol = recentVols.reduce((s, v) => s + v, 0) / recentVols.length;
+  const volRatio = avgVol > 0 ? info.volume / avgVol : 1;
+
+  // 计算前几日的涨幅来判断已连板数
+  let consecutiveCount = 1;
+  const dir = isLimitUp ? 1 : -1;
+  for (let i = kline.length - 2; i >= 0 && i >= kline.length - 6; i--) {
+    const bar = kline[i];
+    const prev = i > 0 ? kline[i - 1] : null;
+    if (prev && prev.close > 0) {
+      const pct = (bar.close - prev.close) / prev.close * 100;
+      if (dir > 0 && pct >= limitPct - 1) consecutiveCount++;
+      else if (dir < 0 && pct <= -(limitPct - 1)) consecutiveCount++;
+      else break;
+    } else break;
+  }
+
+  // 计算连板概率
+  let prob = 50;
+  const factors: string[] = [];
+
+  // 因子1：成交量（缩量封板→强）
+  if (isLimitUp) {
+    if (volRatio < 0.5) { prob += 20; factors.push('缩量封板，筹码锁定良好'); }
+    else if (volRatio < 0.8) { prob += 10; factors.push('量能适中，封板质量较高'); }
+    else if (volRatio < 1.2) { prob += 0; factors.push('量能正常'); }
+    else { prob -= 10; factors.push('放量封板，分歧较大'); }
+  } else {
+    if (volRatio < 0.5) { prob += 5; factors.push('缩量跌停，抛压未释放充分'); }
+    else { prob += 10; factors.push('放量跌停，抛压释放充分'); }
+  }
+
+  // 因子2：流通市值（小盘股更容易连板）
+  const cap = info.marketCap || 0;
+  if (cap > 0) {
+    if (cap < 30) { prob += 15; factors.push('小盘股，连板弹性大'); }
+    else if (cap < 80) { prob += 8; factors.push('中盘股，有一定连板潜力'); }
+    else if (cap < 200) { prob += 0; }
+    else { prob -= 10; factors.push('大盘股，连板难度较大'); }
+  }
+
+  // 因子3：连板位置
+  if (consecutiveCount === 1) { prob += 10; factors.push('首板，上涨空间大'); }
+  else if (consecutiveCount === 2) { prob += 5; factors.push('二板，市场关注度高'); }
+  else if (consecutiveCount === 3) { prob -= 5; factors.push('三板，分歧加大'); }
+  else { prob -= Math.min(20, consecutiveCount * 5); factors.push(`${consecutiveCount}板，高位风险加大`); }
+
+  // 因子4：KDJ位置（J值空间）
+  const last = kline[kline.length - 1];
+  if (last?.kdj?.j != null && isLimitUp) {
+    const j = last.kdj.j;
+    if (j < 60) { prob += 10; factors.push('KDJ仍有上行空间'); }
+    else if (j < 80) { prob += 5; factors.push('KDJ偏高但仍有空间'); }
+    else { prob -= 10; factors.push('KDJ严重超买，回调风险大'); }
+  }
+
+  // 限幅
+  prob = Math.max(5, Math.min(95, prob));
+
+  const nextDayTrend = isLimitUp ? (prob > 50 ? 'up' : 'sideways') : (prob > 50 ? 'down' : 'sideways');
+  const label = isLimitUp ? '涨停' : '跌停';
+
+  const analysis = isLimitUp
+    ? `${consecutiveCount}连板，明日连板概率${prob}%。${factors[0] || ''}`
+    : `今日${label}，明日继续跌停概率${prob}%。${factors[0] || ''}`;
+
+  return {
+    isLimitUp,
+    isLimitDown,
+    consecutiveCount,
+    nextDayProb: prob,
+    nextDayTrend,
+    analysis,
+    factors,
+  };
+}
+
 // ---------- 统一返回值 ----------
 export interface AdvancedSignals {
   threeLocks: ThreeLockSignal[];

@@ -20,9 +20,10 @@ import AdvancedSignalLegend from '../components/AdvancedSignalLegend';
 import PositionAdvice from '../components/PositionAdvice';
 import BacktestReport from '../components/BacktestReport';
 import { generateMarketRecap } from '../utils/marketRecap';
-import { calcAllAdvancedSignals } from '../utils/advancedIndicators';
+import { calcAllAdvancedSignals, calcLimitPrediction } from '../utils/advancedIndicators';
 import type { MarketRecapResult } from '../utils/marketRecap';
-import type { AdvancedSignals } from '../utils/advancedIndicators';
+import type { AdvancedSignals, LimitPrediction as LimitPredictionResult } from '../utils/advancedIndicators';
+import LimitPredictionBanner from '../components/LimitPredictionBanner';
 
 interface AnalysisPageProps {
   code?: string;
@@ -149,7 +150,13 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     return calcAllAdvancedSignals(data.kline);
   }, [data]);
 
-  // 没有数据时
+  // 涨停/跌停连板预测
+  const limitPrediction: LimitPredictionResult | null = useMemo(() => {
+    if (!data || !data.kline || data.kline.length < 5) return null;
+    return calcLimitPrediction(data.kline, liveInfo || data.info);
+  }, [data, liveInfo]);
+
+  // 当没有显示检查时
   if (!data) {
     if (!code) {
       return (
@@ -261,6 +268,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       {/* 技术指标 — 仅当有K线时 */}
       {hasKline && <IndicatorCharts data={recentKline} />}
+
+      {/* 涨停/跌停连板预测 */}
+      {limitPrediction && <LimitPredictionBanner prediction={limitPrediction} />}
 
       {/* 当日复盘 */}
       <MarketRecap recap={recap!} loading={loading || intradayLoading} />
