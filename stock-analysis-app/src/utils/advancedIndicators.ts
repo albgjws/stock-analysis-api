@@ -444,6 +444,126 @@ export function calcVolumePower(kline: KlineBar[], days: number = 20): VolumePow
   };
 }
 
+// ---------- MACD+KDJ 组合双金叉/双死叉 ----------
+export interface DualGoldenCross {
+  index: number;
+  date: string;
+  type: 'golden' | 'death'; // golden=双金叉(买入) death=双死叉(卖出)
+  macdCross: boolean;       // MACD是否金叉/死叉
+  kdjCross: boolean;        // KDJ是否金叉/死叉
+  strength: number;         // 强度: 1=单指标确认, 2=双指标确认
+  details: string;
+}
+
+/**
+ * MACD + KDJ 组合双金叉/双死叉
+ *
+ * 在连续的几根K线内，MACD和KDJ同时或先后发出金叉/死叉信号。
+ *
+ * 双金叉（买入信号）：
+ *   ✅ MACD金叉（DIF上穿DEA）
+ *   ✅ KDJ金叉（K上穿D，且K<40低位）
+ *   两者在相邻3根K线内同时出现 → 强买入信号
+ *
+ * 双死叉（卖出信号）：
+ *   ❌ MACD死叉（DIF下穿DEA）
+ *   ❌ KDJ死叉（K下穿D，且K>60高位）
+ *   两者在相邻3根K线内同时出现 → 强卖出信号
+ */
+export function calcDualGoldenCross(kline: KlineBar[]): DualGoldenCross[] {
+  const signals: DualGoldenCross[] = [];
+  if (kline.length < 10) return signals;
+
+  // 第一步：标记每个K线的MACD和KDJ十字状态
+  interface CrossMark {
+    index: number;
+    date: string;
+    macdGolden: boolean;  // MACD金叉
+    macdDeath: boolean;   // MACD死叉
+    kdjGolden: boolean;   // KDJ金叉(低位)
+    kdjDeath: boolean;    // KDJ死叉(高位)
+  }
+
+  const marks: CrossMark[] = [];
+
+  for (let i = 1; i < kline.length; i++) {
+    const bar = kline[i];
+    const prev = kline[i - 1];
+    if (!bar.macd || !prev.macd || !bar.kdj || !prev.kdj) continue;
+
+    const macdGolden = bar.macd.dif > bar.macd.dea && prev.macd.dif <= prev.macd.dea;
+    const macdDeath = bar.macd.dif < bar.macd.dea && prev.macd.dif >= prev.macd.dea;
+    const kdjGolden = bar.kdj.k > bar.kdj.d && prev.kdj.k <= prev.kdj.d && bar.kdj.k < 40;
+    const kdjDeath = bar.kdj.k < bar.kdj.d && prev.kdj.k >= prev.kdj.d && bar.kdj.k > 60;
+
+    if (macdGolden || macdDeath || kdjGolden || kdjDeath) {
+      marks.push({ index: i, date: bar.date, macdGolden, macdDeath, kdjGolden, kdjDeath });
+    }
+  }
+
+  // 第二步：在相邻3根K线内找MACD+KDJ同时出现的情况
+  const WINDOW = 3;
+  const used = new Set<number>();
+
+  for (let i = 0; i < marks.length; i++) {
+    if (used.has(i)) continue;
+    const m = marks[i];
+
+    for (let j = i + 1; j < marks.length && j <= i + WINDOW; j++) {
+      if (used.has(j)) continue;
+      const n = marks[j];
+
+      // 双金叉检测
+      const hasMacdGolden = m.macdGolden || n.macdGolden;
+      const hasKdjGolden = m.kdjGolden || n.kdjGolden;
+      if (hasMacdGolden && hasKdjGolden) {
+        const lastIdx = Math.max(m.index, n.index);
+        const strength = (m.macdGolden && m.kdjGolden) || (n.macdGolden && n.kdjGolden) ? 2 : 1;
+        const parts: string[] = [];
+        if (m.macdGolden || n.macdGolden) parts.push('MACD金叉');
+        if (m.kdjGolden || n.kdjGolden) parts.push('KDJ低位金叉');
+        signals.push({
+          index: lastIdx,
+          date: kline[lastIdx].date,
+          type: 'golden',
+          macdCross: hasMacdGolden,
+          kdjCross: hasKdjGolden,
+          strength,
+          details: parts.join('+') + `（强度${strength}）`,
+        });
+        used.add(i);
+        used.add(j);
+        break;
+      }
+
+      // 双死叉检测
+      const hasMacdDeath = m.macdDeath || n.macdDeath;
+      const hasKdjDeath = m.kdjDeath || n.kdjDeath;
+      if (hasMacdDeath && hasKdjDeath) {
+        const lastIdx = Math.max(m.index, n.index);
+        const strength = (m.macdDeath && m.kdjDeath) || (n.macdDeath && n.kdjDeath) ? 2 : 1;
+        const parts: string[] = [];
+        if (m.macdDeath || n.macdDeath) parts.push('MACD死叉');
+        if (m.kdjDeath || n.kdjDeath) parts.push('KDJ高位死叉');
+        signals.push({
+          index: lastIdx,
+          date: kline[lastIdx].date,
+          type: 'death',
+          macdCross: hasMacdDeath,
+          kdjCross: hasKdjDeath,
+          strength,
+          details: parts.join('+') + `（强度${strength}）`,
+        });
+        used.add(i);
+        used.add(j);
+        break;
+      }
+    }
+  }
+
+  return signals;
+}
+
 // ---------- 统一返回值 ----------
 export interface AdvancedSignals {
   threeLocks: ThreeLockSignal[];
@@ -451,6 +571,7 @@ export interface AdvancedSignals {
   swingPoints: SwingPoint[];
   bullBear: BullBearGauge | null;
   volumePower: VolumePower | null;
+  dualGoldenCross: DualGoldenCross[];
 }
 
 /**
@@ -463,5 +584,6 @@ export function calcAllAdvancedSignals(kline: KlineBar[]): AdvancedSignals {
     swingPoints: calcSwingPoints(kline),
     bullBear: calcBullBearGauge(kline),
     volumePower: calcVolumePower(kline),
+    dualGoldenCross: calcDualGoldenCross(kline),
   };
 }

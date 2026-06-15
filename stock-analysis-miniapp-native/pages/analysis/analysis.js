@@ -15,7 +15,7 @@ Page({
     sig:null,sigLabel:'',sigClsName:'',ssc:'neutral',sigStrengthText:'',
     supText:'',resText:'',
 
-    threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,
+    threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,dualCross:[],hasDualCross:0,
     ffData:[],ffLatest:'',ffCount:0,
 
     macdBars:[],macdSummary:'',macdDif:'',macdDea:'',macdBarVal:'',macdBarCls:'neutral',
@@ -98,6 +98,41 @@ Page({
       if(b.kdj&&p.kdj&&b.kdj.k<b.kdj.d&&p.kdj.k>=p.kdj.d&&b.kdj.k>60)sw.push({date:b.date,type:'sell',reason:'KDJ高位死叉'});
     }}
 
+    // MACD+KDJ 组合双金叉/双死叉
+    var dc=[];if(hk){var WIN=3;
+      // 标记每根K线的十字状态
+      var marks=[];
+      for(var i=1;i<kl.length;i++){
+        var b=kl[i],p=kl[i-1];
+        if(!b.macd||!p.macd||!b.kdj||!p.kdj)continue;
+        var mg=b.macd.dif>b.macd.dea&&p.macd.dif<=p.macd.dea;
+        var md=b.macd.dif<b.macd.dea&&p.macd.dif>=p.macd.dea;
+        var kg=b.kdj.k>b.kdj.d&&p.kdj.k<=p.kdj.d&&b.kdj.k<40;
+        var kd=b.kdj.k<b.kdj.d&&p.kdj.k>=p.kdj.d&&b.kdj.k>60;
+        if(mg||md||kg||kd)marks.push({i:i,date:b.date,mg:mg,md:md,kg:kg,kd:kd});
+      }
+      // 相邻3根内找MACD+KDJ同时出现
+      var used={};
+      for(var i=0;i<marks.length;i++){
+        if(used[i])continue;
+        var m=marks[i];
+        for(var j=i+1;j<marks.length&&j<=i+WIN;j++){
+          if(used[j])continue;
+          var n=marks[j];
+          if((m.mg||n.mg)&&(m.kg||n.kg)){
+            var li=Math.max(m.i,n.i);
+            dc.push({date:kl[li].date,type:'golden',detail:'双金叉',strength:(m.mg&&m.kg)||(n.mg&&n.kg)?2:1});
+            used[i]=used[j]=1;break;
+          }
+          if((m.md||n.md)&&(m.kd||n.kd)){
+            var li=Math.max(m.i,n.i);
+            dc.push({date:kl[li].date,type:'death',detail:'双死叉',strength:(m.md&&m.kd)||(n.md&&n.kd)?2:1});
+            used[i]=used[j]=1;break;
+          }
+        }
+      }
+    }
+
     // 资金流向
     var ffD=ff.slice(-30).map(function(f){return{h:Math.abs(f.mainNetInflowPercent||0)*2,c:(f.mainNetInflowPercent||0)>=0?'#cf1322':'#3cb371'}});
     var ffL=ff.length>0?$(ff[ff.length-1].mainNetInflowPercent):'';
@@ -161,6 +196,7 @@ Page({
       threeLocks:tl.slice(-3),hasThreeLocks:tl.length>0?1:0,
       tdSeq:td.slice(-10),hasTd:td.length>0?1:0,
       swingPts:sw.slice(-3),hasSwing:sw.length>0?1:0,
+      dualCross:dc,hasDualCross:dc.length>0?1:0,
       ffData:ffD,ffLatest:ffL,ffCount:ffD.length,
 
       macdBars:mb,macdSummary:(lm.dif?'· '+(lm.dif>lm.dea?'多头':'空头'):''),

@@ -64,7 +64,7 @@
 
     <!-- ===== ③ 专业信号 ===== -->
     <view wx:if="{{hasThreeLocks||hasTd||hasSwing}}" class="card">
-      <text class="ct">🔒 专业信号 · 三把锁 · 九转 · 波段</text>
+      <text class="ct">🔒 专业信号 · 三把锁 · 九转 · 波段 · 双金叉</text>
 
       <view wx:if="{{hasThreeLocks}}">
         <text class="ct-sm">三把锁</text>
@@ -94,6 +94,17 @@
         <view wx:for="{{swingPts}}" wx:key="date" class="sig-row">
           <text class="sig-icon">{{item.type==='buy'?'▲':'▼'}}</text>
           <text class="sig-tit">{{item.date}} {{item.reason}}</text>
+        </view>
+      </view>
+
+      <!-- MACD+KDJ 组合双金叉 -->
+      <view wx:if="{{hasDualCross}}" style="margin-top:8px;">
+        <text class="ct-sm">MACD+KDJ组合信号</text>
+        <view wx:for="{{dualCross}}" wx:key="date" class="sig-row">
+          <text class="sig-icon">{{item.type==='golden'?'↑↑':'↓↓'}}</text>
+          <text class="sig-tit">{{item.date}} {{item.detail}}
+            <text style="font-size:10px;color:#999;margin-left:4px;">强度{{item.strength}}</text>
+          </text>
         </view>
       </view>
     </view>

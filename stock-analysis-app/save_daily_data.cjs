@@ -116,6 +116,21 @@ async function main() {
           if (prev?.kdj && last.kdj.k > last.kdj.d && prev.kdj.k <= prev.kdj.d && last.kdj.k < 40) { st += 1; strat.push('KDJ低位金叉'); }
           if (prev?.kdj && last.kdj.k < last.kdj.d && prev.kdj.k >= prev.kdj.d && last.kdj.k > 60) { st -= 1; strat.push('KDJ高位死叉'); }
         }
+        // MACD+KDJ组合双金叉/双死叉检测（最近3根K线内同时出现）
+        if (kline.length >= 5) {
+          let hasMacdGolden = false, hasKdjGolden = false;
+          let hasMacdDeath = false, hasKdjDeath = false;
+          for (let i = Math.max(0, kline.length - 4); i < kline.length; i++) {
+            const b = kline[i], p = i > 0 ? kline[i-1] : null;
+            if (!p || !b.macd || !p.macd || !b.kdj || !p.kdj) continue;
+            if (b.macd.dif > b.macd.dea && p.macd.dif <= p.macd.dea) hasMacdGolden = true;
+            if (b.macd.dif < b.macd.dea && p.macd.dif >= p.macd.dea) hasMacdDeath = true;
+            if (b.kdj.k > b.kdj.d && p.kdj.k <= p.kdj.d && b.kdj.k < 40) hasKdjGolden = true;
+            if (b.kdj.k < b.kdj.d && p.kdj.k >= p.kdj.d && b.kdj.k > 60) hasKdjDeath = true;
+          }
+          if (hasMacdGolden && hasKdjGolden) { st += 2.5; strat.push('MACD+KDJ双金叉'); }
+          if (hasMacdDeath && hasKdjDeath) { st -= 2.5; strat.push('MACD+KDJ双死叉'); }
+        }
         if (st >= 2) sig = 'BUY'; else if (st <= -2) sig = 'SELL';
         insSignal.run(code, code, today, sig, st, strat.join(','), last.close, last.changePercent||0);
         totalSignal++;

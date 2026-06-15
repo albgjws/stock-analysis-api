@@ -101,6 +101,53 @@ const signalItems = [
     ),
   },
   {
+    key: 'dualCross',
+    label: (
+      <Space>
+        <Tag color="red">↑↑</Tag>
+        <span style={{ fontWeight: 600 }}>MACD+KDJ组合双金叉</span>
+        <Tag color="blue">多指标共振</Tag>
+      </Space>
+    ),
+    children: (
+      <div style={{ lineHeight: 2.2, padding: '4px 0' }}>
+        <div style={{ background: '#fff7e6', padding: '8px 12px', borderRadius: 6, marginBottom: 10, border: '1px solid #ffd591' }}>
+          <b>💡 MACD + KDJ 同时发出信号</b>，两指标互相验证，可靠性倍增
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#cf1322' }}>↑↑ 组合双金叉 — 强买入信号 ✅</div>
+          <div style={{ paddingLeft: 20, fontSize: 13 }}>相邻3根K线内MACD和KDJ同时出现金叉：</div>
+          <table style={{ width: '100%', marginTop: 6, borderCollapse: 'collapse', fontSize: 13 }}>
+            <tbody>
+              <tr><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', width: 30, textAlign: 'center', background: '#fff2f0' }}>①</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0' }}><b>MACD</b> 金叉</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', color: '#999' }}>DIF上穿DEA → 中期动能转多</td></tr>
+              <tr><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', textAlign: 'center', background: '#fff2f0' }}>②</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0' }}><b>KDJ</b> 低位金叉</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', color: '#999' }}>K上穿D且K&lt;40 → 短期超卖反弹</td></tr>
+            </tbody>
+          </table>
+          <div style={{ paddingLeft: 20, marginTop: 4, fontSize: 12, color: '#cf1322' }}>
+            🟢 强度2：MACD和KDJ在同一天共振金叉 → 最强买入信号<br/>
+            🟡 强度1：3根K线内先后金叉 → 较强买入信号
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6, color: '#3cb371' }}>↓↓ 组合双死叉 — 强卖出信号 ⚠️</div>
+          <div style={{ paddingLeft: 20, fontSize: 13 }}>相邻3根K线内MACD和KDJ同时出现死叉：</div>
+          <table style={{ width: '100%', marginTop: 6, borderCollapse: 'collapse', fontSize: 13 }}>
+            <tbody>
+              <tr><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', width: 30, textAlign: 'center', background: '#f6ffed' }}>①</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0' }}><b>MACD</b> 死叉</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', color: '#999' }}>DIF下穿DEA → 中期动能转空</td></tr>
+              <tr><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', textAlign: 'center', background: '#f6ffed' }}>②</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0' }}><b>KDJ</b> 高位死叉</td><td style={{ padding: '3px 8px', border: '1px solid #f0f0f0', color: '#999' }}>K下穿D且K&gt;60 → 短期超买回调</td></tr>
+            </tbody>
+          </table>
+          <div style={{ paddingLeft: 20, marginTop: 4, fontSize: 12, color: '#3cb371' }}>
+            🔴 强度2：同一天共振死叉 → 最强卖出信号<br/>
+            🟡 强度1：3根K线内先后死叉 → 较强卖出信号
+          </div>
+        </div>
+      </div>
+    ),
+  },
+  {
     key: 'fundFlow',
     label: (
       <Space>

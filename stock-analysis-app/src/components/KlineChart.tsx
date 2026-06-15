@@ -97,6 +97,25 @@ export default function KlineChart({
       });
     }
 
+    // MACD+KDJ 组合双金叉/双死叉
+    if (advancedSignals && showAdvanced) {
+      advancedSignals.dualGoldenCross.forEach(dgc => {
+        const bar = data[dgc.index];
+        if (!bar) return;
+        const isGolden = dgc.type === 'golden';
+        const color = isGolden ? '#cf1322' : '#3cb371';
+        const labelTxt = isGolden ? '双金叉' : '双死叉';
+        advancedMarkers.push({
+          name: labelTxt,
+          coord: [dgc.date, isGolden ? bar.low - (bar.high - bar.low) * 0.2 : bar.high + (bar.high - bar.low) * 0.2],
+          symbol: 'circle',
+          symbolSize: dgc.strength === 2 ? 36 : 28,
+          itemStyle: { color, borderColor: '#fff', borderWidth: 2, shadowBlur: 8, shadowColor: color },
+          label: { formatter: isGolden ? '↑↑' : '↓↓', color: '#fff', fontSize: 12, fontWeight: 'bold', position: 'inside' },
+        });
+      });
+    }
+
     // 三把锁 scatter 数据
     const threeLocksScatterData = (showAdvanced && advancedSignals?.threeLocks?.length)
       ? advancedSignals.threeLocks.map((lock, idx) => {
@@ -239,6 +258,8 @@ export default function KlineChart({
             <Tag color="red">🔒三把锁</Tag>
             <Tag color="orange">九转</Tag>
             <Tag color="blue">▲波段</Tag>
+            <Tag color="red">↑↑双金叉</Tag>
+            <Tag color="green">↓↓双死叉</Tag>
             <Tag color="purple">主力资金</Tag>
             <span style={{ fontSize: 12, color: '#999' }}>专业指标</span>
             <Switch size="small" checked={showAdvanced} onChange={onToggleAdvanced} />
