@@ -113,6 +113,31 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   usePolling(fetchFundFlow, isActive && !!code ? 60000 : null, isActive, false);
   usePolling(fetchQuote, isActive && !!code ? 5000 : null, isActive, true);
 
+  // 收盘后（15:01）自动刷新一次获取最终数据
+  useEffect(() => {
+    if (!code) return;
+    const now = new Date();
+    const h = now.getHours(), m = now.getMinutes();
+    const time = h * 100 + m;
+    // 只在交易时段（9:30-15:00）内才设定收盘定时器
+    if (time < 930 || time >= 1505) return;
+
+    const closeTime = new Date();
+    closeTime.setHours(15, 1, 0, 0);
+    const delay = closeTime.getTime() - now.getTime();
+    if (delay <= 0) return;
+
+    const timer = setTimeout(() => {
+      console.log('[收盘刷新] 触发收盘数据刷新');
+      fetchQuote();
+      fetchIntraday();
+      fetchFundFlow();
+      setLastRefresh(new Date().toLocaleTimeString() + ' 收盘');
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [code, fetchQuote, fetchIntraday, fetchFundFlow]);
+
   // 合并实时行情数据（用于价格/涨跌幅实时更新）
   // 注意：必须放在所有早期 return 之前（React Hook 规则不能条件性调用）
   const liveInfo = useMemo(() => {

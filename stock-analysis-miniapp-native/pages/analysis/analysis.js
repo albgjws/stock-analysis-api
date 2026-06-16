@@ -38,7 +38,13 @@ Page({
     buyVal:'',diag:null,diagScoreCls:'',diagProbCls:'',diagProbTxt:'',diagSlText:'',diagTpText:'',
   },
 
-  onLoad(o){this.setData({code:o.code||'',stockName:decodeURIComponent(o.name||o.code||'')});this.fetchData();this.fetchIndices()},
+  onLoad(o){
+    this.setData({code:o.code||'',stockName:decodeURIComponent(o.name||o.code||'')});
+    this.fetchData();
+    this.fetchIndices();
+    // 收盘后自动刷新
+    this.scheduleCloseRefresh();
+  },
 
   fetchData(){
     var c=this.data.code;if(!c){this.setData({error:'缺少股票代码',loading:0});return}
@@ -347,10 +353,29 @@ Page({
     if(this._quoteTimer){clearInterval(this._quoteTimer);this._quoteTimer=null}
     if(this._tlTimer){clearInterval(this._tlTimer);this._tlTimer=null}
     if(this._idxTimer){clearInterval(this._idxTimer);this._idxTimer=null}
+    if(this._closeTimer){clearTimeout(this._closeTimer);this._closeTimer=null}
   },
 
   onShow(){this.startPolling()},
   onHide(){this.stopPolling()},
+
+  // 收盘后（15:01）自动刷新一次
+  scheduleCloseRefresh(){
+    var me=this;
+    var now=new Date(),h=now.getHours(),m=now.getMinutes();
+    var t=h*100+m;
+    if(t<930||t>=1505)return;
+    var ct=new Date();ct.setHours(15,1,0,0);
+    var delay=ct.getTime()-now.getTime();
+    if(delay<=0)return;
+    me._closeTimer=setTimeout(function(){
+      API.getQuote(me.data.code).then(function(q){
+        if(!q)return;
+        var ch=q.change||0,cc=ch>0?'up':ch<0?'down':'neutral';
+        me.setData({priceText:'¥'+(q.price||0).toFixed(2),cc:cc,lastRefresh:'收盘 '+new Date().toLocaleTimeString()});
+      }).catch(function(){});
+    },delay);
+  },
 
   doDiag(){
     var p=parseFloat(this.data.buyVal);if(!p||p<=0){wx.showToast({title:'请输入有效价格',icon:'none'});return}
