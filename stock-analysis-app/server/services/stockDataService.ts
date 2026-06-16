@@ -51,7 +51,7 @@ export class StockDataService {
     const isHK = normalized.startsWith('hk');
 
     // 获取基础行情
-    const quotes = await this.sdk.getSimpleQuotes([normalized]);
+    const quotes = await this.sdk.getFullQuotes([normalized]);
     if (!quotes || quotes.length === 0) throw new StockNotFoundError(code);
     const q = quotes[0];
     const prevClose = q.price - (q.change || 0);
@@ -137,6 +137,8 @@ export class StockDataService {
       open: Math.round(dayOpen * 100) / 100,
       prevClose: q.price - (q.change || 0),
       turnoverRate: Math.round(turnoverRate * 100) / 100,
+      bid: (q as any).bid || null,
+      ask: (q as any).ask || null,
     };
   }
 

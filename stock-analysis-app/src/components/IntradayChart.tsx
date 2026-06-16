@@ -105,8 +105,8 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
         },
       },
       grid: [
-        { left: '5%', right: '5%', top: '8%', height: '55%' },
-        { left: '5%', right: '5%', top: '70%', height: '15%' },
+        { left: 60, right: 20, top: '8%', height: '55%' },
+        { left: 60, right: 20, top: '70%', height: '15%' },
       ],
       xAxis: [
         {
@@ -144,7 +144,11 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
             },
           },
           axisLabel: {
-            formatter: (val: number) => val.toFixed(2),
+            formatter: (val: number) => {
+              if (val >= 1000) return val.toFixed(0);
+              if (val >= 100) return val.toFixed(1);
+              return val.toFixed(2);
+            },
             fontSize: 10,
           },
           // 标记昨收
@@ -156,7 +160,15 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           type: 'value',
           gridIndex: 1,
           splitNumber: 2,
-          axisLabel: { show: true, fontSize: 10 },
+          axisLabel: {
+            show: true,
+            fontSize: 10,
+            formatter: (v: number) => {
+              if (v >= 100000000) return (v / 100000000).toFixed(1) + '亿';
+              if (v >= 10000) return (v / 10000).toFixed(0) + '万';
+              return v.toLocaleString();
+            },
+          },
           splitLine: { show: false },
         },
       ],
@@ -230,7 +242,7 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
 
   if (!data || !data.data || data.data.length === 0) {
     if (loading) {
-      return <Card title="今日分时" style={{ borderRadius: 8, marginBottom: 16 }}><div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载分时数据...</div></Card>;
+      return <Card title="今日分时" style={{ borderRadius: 8, width: '100%' }}><div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载分时数据...</div></Card>;
     }
     return (
       <Card
@@ -239,7 +251,7 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
             <span style={{ color: '#1677ff' }}>⚡</span> 今日分时
           </span>
         }
-        style={{ borderRadius: 8, marginBottom: 16 }}
+        style={{ borderRadius: 8, width: '100%' }}
       >
         <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
           非交易时间或暂无分时数据
@@ -302,12 +314,12 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           )}
         </span>
       }
-      style={{ borderRadius: 8, marginBottom: 16 }}
-      styles={{ body: { padding: '12px 0' } }}
+      style={{ borderRadius: 8, width: '100%', height: 400 }}
+      styles={{ body: { padding: '12px 0', height: 362 } }}
     >
       <ReactEChartsCore
         option={option}
-        style={{ height: 380 }}
+        style={{ height: 362, width: '100%' }}
         showLoading={loading}
         notMerge
         lazyUpdate

@@ -62,21 +62,45 @@
       </view>
     </view>
 
+    <!-- ===== 五档盘口 ===== -->
+    <view wx:if="{{bid&&bid.length}}" class="card" style="padding:10px 16px;">
+      <view style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px;">
+        <text>卖盘</text>
+        <text>价格</text>
+        <text>数量</text>
+      </view>
+      <view wx:for="{{ask}}" wx:key="id" style="display:flex;justify-content:space-between;align-items:center;height:22px;position:relative;">
+        <view style="position:absolute;right:0;height:100%;width:{{item.volPct}}%;background:rgba(60,179,113,0.1);border-radius:2rpx;"></view>
+        <text style="width:40rpx;font-size:10px;color:#999;z-index:1;">卖{{index+5}}</text>
+        <text style="flex:1;font-size:12px;font-weight:600;color:#3cb371;text-align:center;z-index:1;">{{item.price.toFixed(2)}}</text>
+        <text style="width:90rpx;font-size:11px;color:#666;text-align:right;z-index:1;">{{item.volTxt}}</text>
+      </view>
+      <view style="text-align:center;font-size:18px;font-weight:700;color:{{cc==='up'?'#cf1322':'#3cb371'}};padding:4rpx 0;border-top:1rpx solid #f0f0f0;border-bottom:1rpx solid #f0f0f0;margin:4rpx 0;">
+        {{priceText}}
+      </view>
+      <view wx:for="{{bid}}" wx:key="id" style="display:flex;justify-content:space-between;align-items:center;height:22px;position:relative;">
+        <view style="position:absolute;right:0;height:100%;width:{{item.volPct}}%;background:rgba(207,19,34,0.1);border-radius:2rpx;"></view>
+        <text style="width:40rpx;font-size:10px;color:#999;z-index:1;">买{{index+1}}</text>
+        <text style="flex:1;font-size:12px;font-weight:600;color:#cf1322;text-align:center;z-index:1;">{{item.price.toFixed(2)}}</text>
+        <text style="width:90rpx;font-size:11px;color:#666;text-align:right;z-index:1;">{{item.volTxt}}</text>
+      </view>
+    </view>
+
     <!-- ===== 涨停/跌停连板预测 ===== -->
     <view wx:if="{{hasLimitPred}}" class="card" style="background:{{limitPred.isUp?'#fff2f0':'#f6ffed'}};border:1rpx solid {{limitPred.isUp?'#ff4d4f':'#52c41a'}}40;">
       <view style="display:flex;align-items:center;justify-content:space-between;">
         <view style="display:flex;align-items:center;gap:8rpx;">
           <text style="font-size:36rpx;">{{limitPred.isUp?'🚀':'💥'}}</text>
-          <view>
+          <view style="display:flex;flex-direction:column;gap:8rpx;">
             <view style="display:flex;align-items:center;gap:6rpx;">
-              <text class="tag-{{limitPred.isUp?'red':'green'}}" style="font-size:26rpx;font-weight:700;padding:2rpx 16rpx;border-radius:6rpx;color:#fff;background:{{limitPred.isUp?'#cf1322':'#3cb371'}};">
+              <view style="font-size:26rpx;font-weight:700;padding:6rpx 20rpx;border-radius:6rpx;color:#fff;background:{{limitPred.isUp?'#cf1322':'#3cb371'}};line-height:1;">
                 {{limitPred.isUp?'涨停':'跌停'}}
-              </text>
-              <text class="tag-{{limitPred.isUp?'volcano':'cyan'}}" style="font-size:24rpx;padding:2rpx 12rpx;border-radius:6rpx;color:{{limitPred.isUp?'#d4380d':'#13a8a8'}};background:{{limitPred.isUp?'#fff2e8':'#e6fffb'}};">
+              </view>
+              <view style="font-size:24rpx;font-weight:500;padding:6rpx 16rpx;border-radius:6rpx;color:{{limitPred.isUp?'#d4380d':'#13a8a8'}};background:{{limitPred.isUp?'#fff2e8':'#e6fffb'}};line-height:1;">
                 {{limitPred.consecutiveCount}}连{{limitPred.isUp?'板':'跌'}}
-              </text>
+              </view>
             </view>
-            <text style="font-size:22rpx;color:#999;margin-top:4rpx;display:block;">明{{limitPred.isUp?'日连板':'继续跌停'}}概率 {{limitPred.nextDayProb}}%</text>
+            <text style="font-size:22rpx;color:#999;">明{{limitPred.isUp?'日连板':'继续跌停'}}概率 <text style="font-weight:700;color:{{limitPred.isUp?'#cf1322':'#3cb371'}};">{{limitPred.nextDayProb}}%</text></text>
           </view>
         </view>
         <view style="width:120rpx;height:120rpx;border-radius:50%;border:6rpx solid {{limitPred.isUp?'#cf1322':'#3cb371'}};display:flex;align-items:center;justify-content:center;flex-shrink:0;">

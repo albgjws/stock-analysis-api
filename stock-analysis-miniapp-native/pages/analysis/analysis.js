@@ -9,7 +9,7 @@ Page({
     priceText:'',cpText:'',chgText:'',cc:'neutral',
     hiText:'',loText:'',opText:'',pcText:'',volText:'',amtText:'',mcText:'',trText:'',
     marketTagClass:'tag-blue',marketTagText:'',
-    isLive:0,lastRefresh:'',
+    isLive:0,lastRefresh:'',bid:[],ask:[],
     idxData:null,
 
     sig:null,sigLabel:'',sigClsName:'',ssc:'neutral',sigStrengthText:'',
@@ -306,6 +306,11 @@ Page({
       API.getQuote(me.data.code).then(function(q){
         if(!q)return;
         var ch=q.change||0,cc=ch>0?'up':ch<0?'down':'neutral';
+        // 五档处理
+        var bidArr=[],askArr=[],maxV=1;
+        if(q.bid&&q.bid.length){bidArr=q.bid.map(function(b){return{price:b.price,volume:b.volume,volTxt:b.volume>=1e4?(b.volume/1e4).toFixed(1)+'万':''+b.volume,volPct:0}});maxV=Math.max.apply(null,q.bid.map(function(b){return b.volume}))}
+        if(q.ask&&q.ask.length){askArr=q.ask.map(function(a){return{price:a.price,volume:a.volume,volTxt:a.volume>=1e4?(a.volume/1e4).toFixed(1)+'万':''+a.volume,volPct:0}});maxV=Math.max(maxV,Math.max.apply(null,q.ask.map(function(a){return a.volume})))}
+        if(maxV>0){bidArr=bidArr.map(function(b){b.volPct=Math.round(b.volume/maxV*100);return b});askArr=askArr.map(function(a){a.volPct=Math.round(a.volume/maxV*100);return a})}
         me.setData({
           priceText:'¥'+(q.price||0).toFixed(2),cc:cc,
           cpText:(q.changePercent>=0?'+':'')+$(q.changePercent)+'%',
@@ -315,6 +320,7 @@ Page({
           volText:q.volume?V(q.volume):me.data.volText,
           amtText:q.amount?V(q.amount):me.data.amtText,
           trText:q.turnoverRate?q.turnoverRate.toFixed(2)+'%':me.data.trText,
+          bid:bidArr,ask:askArr,
         });
       }).catch(function(){});
     },5000);

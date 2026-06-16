@@ -44,6 +44,8 @@ router.get('/:code/quote', async (req: Request, res: Response, next: NextFunctio
       amount: info.amount,
       marketCap: info.marketCap,
       turnoverRate: info.turnoverRate,
+      bid: (info as any).bid || null,
+      ask: (info as any).ask || null,
     });
   } catch (err) {
     next(err);

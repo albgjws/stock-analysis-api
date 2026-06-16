@@ -24,6 +24,7 @@ import { calcAllAdvancedSignals, calcLimitPrediction } from '../utils/advancedIn
 import type { MarketRecapResult } from '../utils/marketRecap';
 import type { AdvancedSignals, LimitPrediction as LimitPredictionResult } from '../utils/advancedIndicators';
 import LimitPredictionBanner from '../components/LimitPredictionBanner';
+import Level5Panel from '../components/Level5Panel';
 
 interface AnalysisPageProps {
   code?: string;
@@ -100,6 +101,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     Promise.all([
       getIntraday(code).then(setIntraday).catch(() => null),
       getFundFlow(code, 60).then(setFundFlow).catch(() => null),
+      getQuote(code).then(setLiveQuote).catch(() => null),
     ]).finally(() => {
       setIntradayLoading(false);
       setLastRefresh(new Date().toLocaleTimeString());
@@ -238,13 +240,25 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       {/* 股票概览 */}
       <StockOverview info={liveInfo} />
 
-      {/* 分时图 — 放在概览下面 */}
-      <IntradayChart
-        data={intraday}
-        loading={intradayLoading}
-        signals={signals}
-        lastRefresh={lastRefresh}
-      />
+      {/* 分时图 + 五档盘口 */}
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <IntradayChart
+            data={intraday}
+            loading={intradayLoading}
+            signals={signals}
+            lastRefresh={lastRefresh}
+          />
+        </div>
+        <div style={{ width: 220, flexShrink: 0 }}>
+          <Level5Panel
+            bid={liveQuote?.bid || (data as any)?.info?.bid}
+            ask={liveQuote?.ask || (data as any)?.info?.ask}
+            price={liveInfo?.price}
+            changePercent={liveInfo?.changePercent}
+          />
+        </div>
+      </div>
 
       {/* K线图 — 仅当有K线数据时显示 */}
       {hasKline ? (
