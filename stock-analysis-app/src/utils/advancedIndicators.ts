@@ -368,6 +368,22 @@ export function calcBullBearGauge(kline: KlineBar[]): BullBearGauge | null {
     if (last.kdj.j < 20) score += 5;  // 超卖加分
   }
 
+  // DMI (±15)
+  if (last.dmi) {
+    const { pdi, mdi, adx } = last.dmi;
+    if (pdi != null && mdi != null) {
+      if (pdi > mdi && adx != null && adx > 25) score += 15;     // 上升趋势确认
+      else if (pdi > mdi) score += 5;                              // 偏多
+      else if (pdi < mdi && adx != null && adx > 25) score -= 15; // 下降趋势确认
+      else score -= 5;                                             // 偏空
+    }
+    if (adx != null && adx > 40) {
+      // 趋势极强，加分（顺势方向）
+      if (pdi != null && mdi != null && pdi > mdi) score += 5;
+      else if (pdi != null && mdi != null) score -= 5;
+    }
+  }
+
   // 成交量趋势 (±10)
   const avgVol10 = prev20.slice(-10).reduce((s, b) => s + b.volume, 0) / 10;
   const avgVol20 = prev20.reduce((s, b) => s + b.volume, 0) / 20;

@@ -210,6 +210,7 @@ export class StockDataService {
           boll: { period: 20, stdDev: 2 },
           rsi: { period: 14 },
           kdj: { period: 9, kPeriod: 3, dPeriod: 3 },
+          dmi: { period: 14, adxPeriod: 14 },
         },
       } as any);
     } catch (err: any) {

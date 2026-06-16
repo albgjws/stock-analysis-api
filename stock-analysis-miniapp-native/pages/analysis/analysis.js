@@ -16,11 +16,11 @@ Page({
     supText:'',resText:'',
 
     threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,dualCross:[],hasDualCross:0,limitPred:null,hasLimitPred:0,
-    ffData:[],ffLatest:'',ffCount:0,
+    ffData:[],ffLatest:'',ffCount:0,chipNow:'—',chipTrend:'—',
 
     macdBars:[],macdSummary:'',macdDif:'',macdDea:'',macdBarVal:'',macdBarCls:'neutral',
     rsiBars:[],rsiSummary:'',rsiNow:'',
-    kdjBars:[],kdjSummary:'',kdjK:'',kdjD:'',kdjJ:'',
+    kdjBars:[],kdjSummary:'',kdjK:'',kdjD:'',kdjJ:'',dmiPdi:'',dmiMdi:'',dmiAdx:'',dmiSummary:'',
 
     sigItems:[],sigDetails:[],sigBuyCount:0,sigSellCount:0,sigNeutralCount:0,
 
@@ -175,6 +175,14 @@ Page({
     // 资金流向
     var ffD=ff.slice(-30).map(function(f){return{h:Math.abs(f.mainNetInflowPercent||0)*2,c:(f.mainNetInflowPercent||0)>=0?'#cf1322':'#3cb371'}});
     var ffL=ff.length>0?$(ff[ff.length-1].mainNetInflowPercent):'';
+    // 筹码集中度计算
+    var chipVals=[],chipSum=0;ff.forEach(function(f){
+      var big=(f.superLargeNetInflowPercent||0)+(f.largeNetInflowPercent||0);
+      var small=(f.mediumNetInflowPercent||0)+(f.smallNetInflowPercent||0);
+      chipSum+=(big-small);chipVals.push(chipSum);
+    });
+    var chipNow=chipVals.length>0?chipVals[chipVals.length-1].toFixed(1):'—';
+    var chipTrend=chipVals.length>5?(chipVals[chipVals.length-1]-chipVals[chipVals.length-5])>0?'上升':'下降':'—';
 
     // MACD
     var md=kl.map(function(b){return b.macd}).filter(Boolean).slice(-35);
@@ -238,11 +246,14 @@ Page({
       dualCross:dc,hasDualCross:dc.length>0?1:0,
       limitPred:lp,hasLimitPred:lp?1:0,
       ffData:ffD,ffLatest:ffL,ffCount:ffD.length,
+      chipNow:chipNow,chipTrend:chipTrend,
 
       macdBars:mb,macdSummary:(lm.dif?'· '+(lm.dif>lm.dea?'多头':'空头'):''),
       macdDif:$(lm.dif),macdDea:$(lm.dea),macdBarVal:$(lm.macd),macdBarCls:(lm.macd||0)>=0?'up':'down',
       rsiBars:rb,rsiSummary:'· '+(rn>70?'超买':rn<30?'超卖':'中性'),rsiNow:rn.toFixed(1),
       kdjBars:kb,kdjSummary:'· '+(lk.k?(lk.k>lk.d?'多头':'空头'):''),kdjK:$(lk.k),kdjD:$(lk.d),kdjJ:$(lk.j),
+      dmiPdi:lb.dmi&&lb.dmi.pdi!=null?$(lb.dmi.pdi):'—',dmiMdi:lb.dmi&&lb.dmi.mdi!=null?$(lb.dmi.mdi):'—',dmiAdx:lb.dmi&&lb.dmi.adx!=null?$(lb.dmi.adx):'—',
+      dmiSummary:lb.dmi&&lb.dmi.pdi!=null&&lb.dmi.mdi!=null?(lb.dmi.pdi>lb.dmi.mdi?'多头':'空头')+(lb.dmi.adx>25?'·趋势中':''):'',
 
       sigItems:si,sigDetails:sDet,sigBuyCount:bC,sigSellCount:sC,sigNeutralCount:nC,
 

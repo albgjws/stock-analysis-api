@@ -44,6 +44,7 @@ export interface KlineBar {
   boll?: { mid: number; upper: number; lower: number; bandwidth?: number };
   rsi?: { rsi6?: number; rsi12?: number; rsi24?: number };
   kdj?: { k: number; d: number; j: number };
+  dmi?: { pdi: number | null; mdi: number | null; adx: number | null; adxr: number | null };
 }
 
 export interface ForecastPoint {

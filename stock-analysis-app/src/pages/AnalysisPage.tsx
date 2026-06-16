@@ -306,7 +306,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       {hasKline && showAdvanced && <AdvancedSignalLegend />}
 
       {/* 技术指标 — 仅当有K线时 */}
-      {hasKline && <IndicatorCharts data={recentKline} />}
+      {hasKline && <IndicatorCharts data={recentKline} fundFlow={fundFlow} />}
 
       {/* 涨停/跌停连板预测 */}
       {limitPrediction && <LimitPredictionBanner prediction={limitPrediction} />}
