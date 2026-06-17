@@ -77,7 +77,7 @@ async function main() {
   for (const code of codes) {
     try {
       console.log('\n📈', code, '...');
-      const kline = await sdk.getKlineWithIndicators(code, { count: 200, indicators: { ma: { periods: [5,10,20,60] }, macd: { fast: 12, slow: 26, signal: 9 }, boll: { period: 20, stdDev: 2 }, rsi: { period: 14 }, kdj: { period: 9, kPeriod: 3, dPeriod: 3 }, dmi: { period: 14, adxPeriod: 14 } } });
+      const kline = await sdk.getKlineWithIndicators(code, { count: 200, indicators: { ma: { periods: [5,10,20,60] }, macd: { fast: 12, slow: 26, signal: 9 }, boll: { period: 20, stdDev: 2 }, rsi: { period: 14 }, kdj: { period: 9, kPeriod: 3, dPeriod: 3 } } });
       if (!kline || !kline.length) { console.log('   ⚠️ 无数据'); continue; }
 
       const insBatch = db.transaction((rows) => {

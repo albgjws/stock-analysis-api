@@ -275,7 +275,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
             lastRefresh={lastRefresh}
           />
         </div>
-        <div style={{ width: 200, flexShrink: 0 }}>
+        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
           <Level5Panel
             bid={liveQuote?.bid || (data as any)?.info?.bid}
             ask={liveQuote?.ask || (data as any)?.info?.ask}

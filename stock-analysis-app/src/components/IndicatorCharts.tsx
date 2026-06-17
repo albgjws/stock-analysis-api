@@ -49,21 +49,6 @@ const kdjHelp = (
   </div>
 );
 
-const dmiHelp = (
-  <div style={{ maxWidth: 260, lineHeight: 1.8, fontSize: 12 }}>
-    <b>DMI（趋向指标）</b><br />
-    判断趋势方向和强度，由+DI、-DI、ADX三条线组成<br /><br />
-    <span style={{color:'#cf1322'}}>+DI</span>（红线） = 上升方向线，越大上升趋势越强<br />
-    <span style={{color:'#3cb371'}}>-DI</span>（绿线） = 下降方向线，越大下降趋势越强<br />
-    <span style={{color:'#722ed1'}}>ADX（紫线）</span> = 趋势强度，越大趋势越强<br /><br />
-    <b>用法：</b><br />
-    ✅ <span style={{color:'#cf1322'}}>+DI</span> &gt; <span style={{color:'#3cb371'}}>-DI</span> 且 ADX &gt; 25 = 上升趋势确认<br />
-    ❌ <span style={{color:'#3cb371'}}>-DI</span> &gt; <span style={{color:'#cf1322'}}>+DI</span> 且 ADX &gt; 25 = 下降趋势确认<br />
-    📊 ADX &lt; 20 = 盘整/无趋势，不适合趋势交易<br />
-    📊 ADX从低位上穿两线 = 趋势即将启动（重要信号）
-  </div>
-);
-
 function ChartTitle({ title, help }: { title: string; help: React.ReactNode }) {
   return (
     <span>
@@ -99,7 +84,7 @@ function MACDChart({ data }: { data: KlineBar[] }) {
           return html;
         },
       },
-      grid: { left: '8%', right: '5%', top: '10%', bottom: '10%' },
+      grid: { left: '8%', right: '5%', top: '18%', bottom: '10%' },
       xAxis: {
         type: 'category',
         data: dates,
@@ -201,7 +186,7 @@ function KDJChart({ data }: { data: KlineBar[] }) {
           return html;
         },
       },
-      grid: { left: '8%', right: '5%', top: '10%', bottom: '10%' },
+      grid: { left: '8%', right: '5%', top: '18%', bottom: '10%' },
       xAxis: {
         type: 'category',
         data: dates,
@@ -220,62 +205,6 @@ function KDJChart({ data }: { data: KlineBar[] }) {
   return (
     <Card
       title={<ChartTitle title="KDJ (9/3/3)" help={kdjHelp} />}
-      size="small"
-      style={{ height: '100%', borderRadius: 8 }}
-      styles={{ body: { padding: '8px 0' } }}
-    >
-      <ReactEChartsCore option={option} style={{ height: 180 }} notMerge lazyUpdate />
-    </Card>
-  );
-}
-
-function DMIChart({ data }: { data: KlineBar[] }) {
-  const option = useMemo(() => {
-    const dates = data.map(d => d.date);
-    const pdiData = data.map(d => d.dmi?.pdi ?? null);
-    const mdiData = data.map(d => d.dmi?.mdi ?? null);
-    const adxData = data.map(d => d.dmi?.adx ?? null);
-
-    return {
-      tooltip: {
-        trigger: 'axis',
-        formatter: (params: any[]) => {
-          let html = `<div>${params[0]?.axisValue || ''}</div>`;
-          params.forEach((p: any) => {
-            if (p.value != null) {
-              html += `<div>${p.seriesName}: <b>${Number(p.value).toFixed(2)}</b></div>`;
-            }
-          });
-          return html;
-        },
-      },
-      grid: { left: '8%', right: '5%', top: '10%', bottom: '10%' },
-      xAxis: {
-        type: 'category',
-        data: dates,
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-      yAxis: { type: 'value', min: 0, max: 100, splitLine: { show: true, lineStyle: { type: 'dashed' } } },
-      // ADX趋势强度区域
-      visualMap: {
-        show: false,
-        pieces: [
-          { gt: 25, color: 'rgba(114, 46, 209, 0.08)' },
-        ],
-      },
-      series: [
-        { name: '+DI', type: 'line', data: pdiData, smooth: true, symbol: 'none', lineStyle: { width: 1.5, color: '#cf1322' }, connectNulls: true },
-        { name: '-DI', type: 'line', data: mdiData, smooth: true, symbol: 'none', lineStyle: { width: 1.5, color: '#3cb371' }, connectNulls: true },
-        { name: 'ADX', type: 'line', data: adxData, smooth: true, symbol: 'none', lineStyle: { width: 2, color: '#722ed1' }, connectNulls: true },
-        { name: '趋势线(25)', type: 'line', data: Array(dates.length).fill(25), symbol: 'none', lineStyle: { width: 1, type: 'dashed', color: '#722ed1', opacity: 0.4 } },
-      ],
-    };
-  }, [data]);
-
-  return (
-    <Card
-      title={<ChartTitle title="DMI (14,14)" help={dmiHelp} />}
       size="small"
       style={{ height: '100%', borderRadius: 8 }}
       styles={{ body: { padding: '8px 0' } }}
@@ -409,9 +338,6 @@ export default function IndicatorCharts({ data, fundFlow }: IndicatorChartsProps
       </Col>
       <Col xs={24} md={8}>
         <KDJChart data={data} />
-      </Col>
-      <Col xs={24} md={8}>
-        <DMIChart data={data} />
       </Col>
       <Col xs={24} md={8}>
         <FundFlowChart fundFlow={fundFlow || []} />

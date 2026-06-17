@@ -20,7 +20,7 @@ Page({
 
     macdBars:[],macdSummary:'',macdDif:'',macdDea:'',macdBarVal:'',macdBarCls:'neutral',
     rsiBars:[],rsiSummary:'',rsiNow:'',
-    kdjBars:[],kdjSummary:'',kdjK:'',kdjD:'',kdjJ:'',dmiPdi:'',dmiMdi:'',dmiAdx:'',dmiSummary:'',
+    kdjBars:[],kdjSummary:'',kdjK:'',kdjD:'',kdjJ:'',
 
     sigItems:[],sigDetails:[],sigBuyCount:0,sigSellCount:0,sigNeutralCount:0,
 
@@ -258,8 +258,6 @@ Page({
       macdDif:$(lm.dif),macdDea:$(lm.dea),macdBarVal:$(lm.macd),macdBarCls:(lm.macd||0)>=0?'up':'down',
       rsiBars:rb,rsiSummary:'· '+(rn>70?'超买':rn<30?'超卖':'中性'),rsiNow:rn.toFixed(1),
       kdjBars:kb,kdjSummary:'· '+(lk.k?(lk.k>lk.d?'多头':'空头'):''),kdjK:$(lk.k),kdjD:$(lk.d),kdjJ:$(lk.j),
-      dmiPdi:lb.dmi&&lb.dmi.pdi!=null?$(lb.dmi.pdi):'—',dmiMdi:lb.dmi&&lb.dmi.mdi!=null?$(lb.dmi.mdi):'—',dmiAdx:lb.dmi&&lb.dmi.adx!=null?$(lb.dmi.adx):'—',
-      dmiSummary:lb.dmi&&lb.dmi.pdi!=null&&lb.dmi.mdi!=null?(lb.dmi.pdi>lb.dmi.mdi?'多头':'空头')+(lb.dmi.adx>25?'·趋势中':''):'',
 
       sigItems:si,sigDetails:sDet,sigBuyCount:bC,sigSellCount:sC,sigNeutralCount:nC,
 

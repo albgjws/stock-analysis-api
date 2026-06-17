@@ -142,7 +142,6 @@ router.get('/:code/analysis', async (req: Request, res: Response, next: NextFunc
           boll: { period: 20, stdDev: 2 },
           rsi: { period: 14 },
           kdj: { period: 9, kPeriod: 3, dPeriod: 3 },
-          dmi: { period: 14, adxPeriod: 14 },
         },
       });
     } catch (err: any) {
