@@ -40,64 +40,67 @@ export default function KlineChart({
     const signalMarkers: any[] = [];
     const advancedMarkers: any[] = [];
 
-    // 买卖信号标记
+    // 买卖信号标记（放在K线柱的上方/下方，不遮挡）
     if (signals && showAdvanced) {
       const lastIdx = data.length - 1;
       const lastBar = data[lastIdx];
+      const lastRange = (lastBar.high - lastBar.low) || lastBar.close * 0.005;
       const isBuy = signals.overall === 'STRONG_BUY' || signals.overall === 'BUY';
       const isSell = signals.overall === 'STRONG_SELL' || signals.overall === 'SELL';
       if (isBuy) {
-        signalMarkers.push({ name: '买入信号', coord: [dates[lastIdx], lastBar.low], symbol: 'pin', symbolSize: 50, itemStyle: { color: '#cf1322' }, label: { formatter: '买', color: '#fff', fontSize: 16, fontWeight: 'bold', position: 'inside' } });
+        signalMarkers.push({ name: '买入信号', coord: [dates[lastIdx], lastBar.low - lastRange * 1.5], symbol: 'pin', symbolSize: 30, itemStyle: { color: '#cf1322' }, label: { formatter: '买', color: '#fff', fontSize: 12, fontWeight: 'bold', position: 'inside' } });
       } else if (isSell) {
-        signalMarkers.push({ name: '卖出信号', coord: [dates[lastIdx], lastBar.high], symbol: 'pin', symbolSize: 50, itemStyle: { color: '#3cb371' }, label: { formatter: '卖', color: '#fff', fontSize: 16, fontWeight: 'bold', position: 'inside' } });
+        signalMarkers.push({ name: '卖出信号', coord: [dates[lastIdx], lastBar.high + lastRange * 1.5], symbol: 'pin', symbolSize: 30, itemStyle: { color: '#3cb371' }, label: { formatter: '卖', color: '#fff', fontSize: 12, fontWeight: 'bold', position: 'inside' } });
       }
     }
 
-    // 三把锁
+    // 三把锁（标记放到K线上下方各留 1 倍振幅间距）
     if (advancedSignals && showAdvanced) {
       advancedSignals.threeLocks.forEach(lock => {
         const bar = data[lock.index];
         if (!bar) return;
         const isBuy = lock.type === 'buy';
         const color = isBuy ? '#cf1322' : '#3cb371';
+        const range = (bar.high - bar.low) || bar.close * 0.005;
         advancedMarkers.push({
           name: `三把锁${isBuy ? '买入' : '卖出'}`,
-          coord: [lock.date, isBuy ? bar.low : bar.high],
+          coord: [lock.date, isBuy ? bar.low - range * 1.2 : bar.high + range * 1.2],
           symbol: isBuy ? 'diamond' : 'pin',
-          symbolSize: lock.lockCount === 3 ? 40 : 30,
+          symbolSize: lock.lockCount === 3 ? 28 : 22,
           symbolRotate: isBuy ? 0 : 180,
-          itemStyle: { color, borderColor: '#fff', borderWidth: 2, shadowBlur: 6, shadowColor: color },
-          label: { formatter: `🔒${lock.lockCount}`, color: '#fff', fontSize: 11, fontWeight: 'bold', position: 'inside' },
+          itemStyle: { color, borderColor: '#fff', borderWidth: 1.5, shadowBlur: 4, shadowColor: color },
+          label: { formatter: `🔒${lock.lockCount}`, color: '#fff', fontSize: 9, fontWeight: 'bold', position: 'inside' },
         });
         if (lock.lockCount === 3) {
           advancedMarkers.push({
             name: '三锁全开',
-            coord: [lock.date, isBuy ? bar.low - (bar.high - bar.low) * 0.3 : bar.high + (bar.high - bar.low) * 0.3],
-            symbol: 'rect', symbolSize: [50, 18], itemStyle: { color: color + 'cc' },
-            label: { formatter: '⚡三锁全开', color: '#fff', fontSize: 10, position: 'inside' },
+            coord: [lock.date, isBuy ? bar.low - range * 2 : bar.high + range * 2],
+            symbol: 'rect', symbolSize: [36, 14], itemStyle: { color: color + 'cc' },
+            label: { formatter: '⚡三锁全开', color: '#fff', fontSize: 8, position: 'inside' },
           });
         }
       });
     }
 
-    // 波段买卖点
+    // 波段买卖点（同上）
     if (advancedSignals && showAdvanced) {
       advancedSignals.swingPoints.forEach(sp => {
         const bar = data[sp.index];
         if (!bar) return;
         const isBuy = sp.type === 'buy';
+        const range = (bar.high - bar.low) || bar.close * 0.005;
         advancedMarkers.push({
           name: `波段${isBuy ? '买入' : '卖出'}`,
-          coord: [sp.date, isBuy ? bar.low : bar.high],
+          coord: [sp.date, isBuy ? bar.low - range * 1.2 : bar.high + range * 1.2],
           symbol: isBuy ? 'triangle' : 'diamond',
-          symbolSize: 24, symbolRotate: isBuy ? 0 : 180,
+          symbolSize: 16, symbolRotate: isBuy ? 0 : 180,
           itemStyle: { color: isBuy ? '#cf1322' : '#3cb371' },
-          label: { formatter: isBuy ? '▲' : '▼', color: '#fff', fontSize: 12, fontWeight: 'bold', position: 'inside' },
+          label: { formatter: isBuy ? '▲' : '▼', color: '#fff', fontSize: 9, fontWeight: 'bold', position: 'inside' },
         });
       });
     }
 
-    // MACD+KDJ 组合双金叉/双死叉
+    // MACD+KDJ 组合双金叉/双死叉（同上）
     if (advancedSignals && showAdvanced) {
       advancedSignals.dualGoldenCross.forEach(dgc => {
         const bar = data[dgc.index];
@@ -105,13 +108,14 @@ export default function KlineChart({
         const isGolden = dgc.type === 'golden';
         const color = isGolden ? '#cf1322' : '#3cb371';
         const labelTxt = isGolden ? '双金叉' : '双死叉';
+        const range2 = (bar.high - bar.low) || bar.close * 0.005;
         advancedMarkers.push({
           name: labelTxt,
-          coord: [dgc.date, isGolden ? bar.low - (bar.high - bar.low) * 0.2 : bar.high + (bar.high - bar.low) * 0.2],
+          coord: [dgc.date, isGolden ? bar.low - range2 * 1.2 : bar.high + range2 * 1.2],
           symbol: 'circle',
-          symbolSize: dgc.strength === 2 ? 36 : 28,
-          itemStyle: { color, borderColor: '#fff', borderWidth: 2, shadowBlur: 8, shadowColor: color },
-          label: { formatter: isGolden ? '↑↑' : '↓↓', color: '#fff', fontSize: 12, fontWeight: 'bold', position: 'inside' },
+          symbolSize: dgc.strength === 2 ? 22 : 18,
+          itemStyle: { color, borderColor: '#fff', borderWidth: 1.5, shadowBlur: 4, shadowColor: color },
+          label: { formatter: isGolden ? '↑↑' : '↓↓', color: '#fff', fontSize: 9, fontWeight: 'bold', position: 'inside' },
         });
       });
     }
@@ -250,7 +254,7 @@ export default function KlineChart({
       ],
       series: [
         // 0: K线
-        { name: 'K线', type: 'candlestick', animation: false, data: ohlc, itemStyle: { color: '#cf1322', color0: '#3cb371', borderColor: '#cf1322', borderColor0: '#3cb371' }, markPoint: { data: [...signalMarkers, ...advancedMarkers], symbol: 'pin', symbolSize: 50, animation: false } },
+        { name: 'K线', type: 'candlestick', animation: false, data: ohlc, itemStyle: { color: '#cf1322', color0: '#3cb371', borderColor: '#cf1322', borderColor0: '#3cb371' }, markPoint: { data: [...signalMarkers, ...advancedMarkers], symbol: 'pin', symbolSize: 30, animation: false } },
         // 1: 三把锁scatter
         { name: '三把锁', type: 'scatter', animation: false, xAxisIndex: 0, yAxisIndex: 0, data: threeLocksScatterData, tooltip: { formatter: (p: any) => { const idx = p.data?._idx ?? p.dataIndex; const lock = advancedSignals?.threeLocks?.[idx]; if (!lock) return ''; const t = lock.type === 'buy' ? '买入信号' : '卖出信号'; return `<div style="font-size:13px;line-height:1.8"><b>${lock.date}</b><br/>🔒 <b>${t}（${lock.lockCount}/3）</b><br/>${lock.details.map((d: string) => `· ${d}`).join('<br/>')}<br/><span style="color:${lock.lockCount === 3 ? '#cf1322' : '#fa8c16'}">${lock.lockCount === 3 ? '✅ 三锁全开 — 信号强烈！' : '⚠️ 两锁确认 — 信号较强'}</span></div>`; } } },
         // 2-5: MA
@@ -290,13 +294,13 @@ export default function KlineChart({
               </span>
             )}
           </span>
-          <Space size="small">
-            <Tag color="red">🔒三把锁</Tag>
-            <Tag color="orange">九转</Tag>
-            <Tag color="blue">▲波段</Tag>
-            <Tag color="red">↑↑双金叉</Tag>
-            <Tag color="green">↓↓双死叉</Tag>
-            <Tag color="purple">主力资金</Tag>
+          <Space size="small" wrap style={{ gap: 3 }}>
+            <Tag color="red" style={{ fontSize: 11, lineHeight: '18px', margin: 0 }}>🔒三把锁</Tag>
+            <Tag color="orange" style={{ fontSize: 11, lineHeight: '18px', margin: 0 }}>九转</Tag>
+            <Tag color="blue" style={{ fontSize: 11, lineHeight: '18px', margin: 0 }}>▲波段</Tag>
+            <Tag color="red" style={{ fontSize: 11, lineHeight: '18px', margin: 0 }}>↑↑双金叉</Tag>
+            <Tag color="green" style={{ fontSize: 11, lineHeight: '18px', margin: 0 }}>↓↓双死叉</Tag>
+            <Tag color="purple" style={{ fontSize: 11, lineHeight: '18px', margin: 0 }}>主力资金</Tag>
             <span style={{ fontSize: 12, color: '#999' }}>专业指标</span>
             <Switch size="small" checked={showAdvanced} onChange={onToggleAdvanced} />
           </Space>
