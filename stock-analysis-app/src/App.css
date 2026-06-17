@@ -82,3 +82,15 @@ body {
 .stock-tab .ant-tabs-tab-btn {
   font-size: 13px;
 }
+
+/* 五档盘口：桌面固定200px，窄屏撑满 */
+.level5-container {
+  width: 200px;
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .level5-container {
+    width: 100%;
+    flex-shrink: 1;
+  }
+}

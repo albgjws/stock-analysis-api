@@ -265,7 +265,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       {/* 股票概览 */}
       <StockOverview info={liveInfo} />
 
-      {/* 分时图 + 五档盘口（窄屏五档在上） */}
+      {/* 分时图 + 五档盘口 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 300 }}>
           <IntradayChart
@@ -275,7 +275,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
             lastRefresh={lastRefresh}
           />
         </div>
-        <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+        <div className="level5-container">
           <Level5Panel
             bid={liveQuote?.bid || (data as any)?.info?.bid}
             ask={liveQuote?.ask || (data as any)?.info?.ask}
