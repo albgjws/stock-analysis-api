@@ -6,7 +6,7 @@
   "window": {
     "backgroundTextStyle": "light",
     "navigationBarBackgroundColor": "#1677ff",
-    "navigationBarTitleText": "A股分析工具",
+    "navigationBarTitleText": "股票分析工具",
     "navigationBarTextStyle": "white"
   },
   "style": "v2",

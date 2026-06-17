@@ -1,6 +1,6 @@
 {
   "miniprogramRoot": "./",
-  "projectname": "A股分析工具",
+  "projectname": "股票分析工具",
   "description": "A股技术分析",
   "appid": "wx2360dc5d6c989bdc",
   "setting": {

@@ -30,7 +30,7 @@ export default function HomePage({ onAddTab }: HomePageProps) {
       >
         <div style={{ marginBottom: 32 }}>
           <Title level={2} style={{ color: '#1677ff', marginBottom: 8 }}>
-            A股分析工具
+            股票分析工具
           </Title>
           <Paragraph type="secondary" style={{ fontSize: 16, marginBottom: 4 }}>
             输入股票代码或名称，获取技术分析、趋势预测和买卖信号

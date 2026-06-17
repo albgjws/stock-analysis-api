@@ -61,7 +61,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
         >
           <LineChartOutlined style={{ fontSize: 24, color: '#1677ff' }} />
           <Title level={4} style={{ margin: 0, color: '#1677ff' }}>
-            A股分析工具
+            股票分析工具
           </Title>
         </Link>
 
