@@ -606,16 +606,23 @@ export interface LimitPrediction {
 export function calcLimitPrediction(kline: KlineBar[], info: { price: number; changePercent: number; volume: number; marketCap: number; prevClose?: number }): LimitPrediction | null {
   if (!kline || kline.length < 5) return null;
 
+  // stock-sdk 的 changePercent 一直是百分比格式（10.0=涨10%, -5.2=跌5.2%）
   const chgPct = info.changePercent;
-  // changePercent 可能为百分比(10.0)或小数(0.10)，统一处理
-  const absChg = Math.abs(chgPct);
-  const normalizedPct = absChg > 1 ? chgPct : chgPct * 100;
-  const isST = (info as any).name?.includes('ST') || false;
+  const isST = false; // ST标记不准确，通过上一条K线判断
 
-  // 涨停/跌停阈值
+  // 用K线收盘价验证是否真的涨停/跌停
+  const lastBar = kline[kline.length - 1];
+  const prevBar = kline.length > 1 ? kline[kline.length - 2] : null;
+  if (!lastBar || !prevBar) return null;
+
+  // 从K线计算实际涨跌幅
+  const klineChgPct = ((lastBar.close - prevBar.close) / prevBar.close) * 100;
+  // 取min确保数据的可靠性
+  const effectivePct = Math.abs(chgPct) > Math.abs(klineChgPct) * 1.5 ? klineChgPct : chgPct;
+
   const limitPct = isST ? 4.8 : 9.6;
-  const isLimitUp = normalizedPct >= limitPct;
-  const isLimitDown = normalizedPct <= -limitPct;
+  const isLimitUp = effectivePct >= limitPct;
+  const isLimitDown = effectivePct <= -limitPct;
 
   if (!isLimitUp && !isLimitDown) return null;
 

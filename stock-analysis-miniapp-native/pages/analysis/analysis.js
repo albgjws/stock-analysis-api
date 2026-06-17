@@ -141,11 +141,17 @@ Page({
 
     // 涨停/跌停连板预测
     var lp=null;
+    // 用K线实际收盘价验证是否涨停/跌停
+    var lastBar=kl.length>0?kl[kl.length-1]:null;
+    var prevBar2=kl.length>1?kl[kl.length-2]:null;
+    var klinePct=lastBar&&prevBar2?((lastBar.close-prevBar2.close)/prevBar2.close*100):0;
     var chPct=info.changePercent||0;
+    // 避免小涨跌幅被误判，用K线校准
+    var effPct=Math.abs(chPct)>Math.abs(klinePct)*1.5?klinePct:chPct;
     var isST=(info.name||'').indexOf('ST')>=0;
     var limitPct=isST?4.8:9.6;
-    if(chPct>=limitPct||chPct<=-limitPct){
-      var isUp=chPct>=limitPct;
+    if(effPct>=limitPct||effPct<=-limitPct){
+      var isUp=effPct>=limitPct;
       var avgVol=0;for(var i=Math.max(0,kl.length-20);i<kl.length;i++)avgVol+=kl[i].volume;
       avgVol=avgVol/Math.min(20,kl.length);
       var volRate=avgVol>0?((info.volume||0)/avgVol):1;
@@ -392,7 +398,7 @@ Page({
     var p=parseFloat(this.data.buyVal);if(!p||p<=0){wx.showToast({title:'请输入有效价格',icon:'none'});return}
     var me=this;
     wx.request({
-      url:'http://47.97.6.167/api/stock/'+this.data.code+'/purchase-analysis?buyPrice='+p,
+      url:'https://stock-analysis-ryan.xyz/api/stock/'+this.data.code+'/purchase-analysis?buyPrice='+p,
       success:function(r){
         if(r.statusCode===200){
           var d=r.data;

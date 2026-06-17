@@ -186,7 +186,7 @@
 
     <!-- ===== ⑤ 指标图表：MACD / RSI / KDJ / DMI ===== -->
     <view class="card" style="padding:12px 16px;">
-      <view class="rw" style="flex-wrap:wrap;">
+      <view class="rw" style="flex-wrap:wrap;gap:0;">
         <view wx:if="{{macdBars.length>0}}" style="flex:0 0 50%;box-sizing:border-box;padding-right:4rpx;margin-bottom:8rpx;">
           <text class="ct-sm" style="margin:0 0 4px;">📊 MACD {{macdSummary}}</text>
           <view class="ch" style="height:60px;">
