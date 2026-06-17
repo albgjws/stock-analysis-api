@@ -2,7 +2,7 @@
   <!-- 顶部标题 -->
   <view class="header">
     <text class="header-icon">📈</text>
-    <text class="header-title">A股分析助手</text>
+    <text class="header-title">股票分析工具</text>
     <text class="header-sub">智能技术分析 · 趋势预测 · 买卖信号</text>
   </view>
 
@@ -53,7 +53,7 @@
   <!-- 功能引导 -->
   <view wx:else class="guide">
     <view class="guide-icon">📈</view>
-    <text class="guide-title">智能A股分析</text>
+    <text class="guide-title">智能股票分析</text>
     <text class="guide-desc">输入股票代码或名称，获取全面的技术分析、趋势预测和买卖建议</text>
     <view class="feature-grid">
       <view class="feature-card"><text class="fc-icon">📊</text><text class="fc-label">技术指标</text><text class="fc-desc">MACD/RSI/KDJ</text></view>
