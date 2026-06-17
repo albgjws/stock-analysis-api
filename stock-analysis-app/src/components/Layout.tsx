@@ -35,7 +35,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }, [fetchIdx]);
 
   return (
-    <AntLayout style={{ minHeight: '100vh' }}>
+    <AntLayout style={{ minHeight: '100vh', overflowX: 'hidden' }}>
       <Header
         style={{
           background: '#fff',
@@ -43,6 +43,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           display: 'flex',
           alignItems: 'center',
           padding: '0 24px',
+          boxSizing: 'border-box',
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
           position: 'sticky',
           top: 0,
@@ -94,6 +95,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           maxWidth: 1400,
           width: '100%',
           margin: '0 auto',
+          boxSizing: 'border-box',
         }}
       >
         {children}

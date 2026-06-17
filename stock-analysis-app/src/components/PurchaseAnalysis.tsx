@@ -120,7 +120,7 @@ export default function PurchaseAnalysis({ stockCode, stockName }: PurchaseAnaly
       style={{ borderRadius: 8, marginBottom: 16 }}
     >
       {/* 输入区 */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
         <Text strong style={{ whiteSpace: 'nowrap' }}>
           {stockName}（{stockCode}）
         </Text>
@@ -133,7 +133,7 @@ export default function PurchaseAnalysis({ stockCode, stockName }: PurchaseAnaly
           step={0.01}
           precision={2}
           size="large"
-          style={{ width: 160 }}
+          style={{ maxWidth: 160 }}
           prefix="¥"
           onPressEnter={handleAnalyze}
         />
