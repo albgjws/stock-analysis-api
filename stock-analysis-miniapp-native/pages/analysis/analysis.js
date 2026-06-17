@@ -16,7 +16,7 @@ Page({
     supText:'',resText:'',
 
     threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,dualCross:[],hasDualCross:0,limitPred:null,hasLimitPred:0,
-    ffData:[],ffLatest:'',ffCount:0,chipNow:'—',chipTrend:'—',
+    ffData:[],ffLatest:'',ffCount:0,ffSummary:'',ffInDays:0,ffSum5:'',ffSum5Val:0,ffDominant:'',ffIn:0,chipNow:'—',chipTrend:'—',chipClr:'#999',chipClrVal:'#722ed1',
 
     macdBars:[],macdSummary:'',macdDif:'',macdDea:'',macdBarVal:'',macdBarCls:'neutral',
     rsiBars:[],rsiSummary:'',rsiNow:'',
@@ -181,14 +181,34 @@ Page({
     // 资金流向
     var ffD=ff.slice(-30).map(function(f){return{h:Math.abs(f.mainNetInflowPercent||0)*2,c:(f.mainNetInflowPercent||0)>=0?'#cf1322':'#3cb371'}});
     var ffL=ff.length>0?$(ff[ff.length-1].mainNetInflowPercent):'';
+    // 资金流向文字总结
+    var ffLast=ff[ff.length-1]||{},ffPct=ffLast.mainNetInflowPercent||0,ffIn=ffPct>0;
+    var ffLast5=ff.slice(-5),ffInDays=0,ffSum5=0;
+    ffLast5.forEach(function(f){if((f.mainNetInflowPercent||0)>0)ffInDays++;ffSum5+=(f.mainNetInflowPercent||0);});
+    var ffSummary='';
+    if(ffIn&&ffInDays>=3)ffSummary='主力连续净流入，资金积极做多';
+    else if(ffIn)ffSummary='主力今日净流入，关注持续性';
+    else if(ffInDays<=1&&ffSum5<-2)ffSummary='主力持续流出，资金态度偏空';
+    else if(ffInDays<=1)ffSummary='主力近期以流出为主，谨慎观望';
+    else ffSummary='主力进出交替，方向不明确';
+    var ffDominant=ffInDays>=3?'✅ 多头主导':ffInDays<=1?'❌ 空头主导':'⚪ 多空拉锯';
     // 筹码集中度计算
     var chipVals=[],chipSum=0;ff.forEach(function(f){
       var big=(f.superLargeNetInflowPercent||0)+(f.largeNetInflowPercent||0);
       var small=(f.mediumNetInflowPercent||0)+(f.smallNetInflowPercent||0);
       chipSum+=(big-small);chipVals.push(chipSum);
     });
-    var chipNow=chipVals.length>0?chipVals[chipVals.length-1].toFixed(1):'—';
-    var chipTrend=chipVals.length>5?(chipVals[chipVals.length-1]-chipVals[chipVals.length-5])>0?'上升':'下降':'—';
+    var chipNow=chipVals.length>0?chipVals[chipVals.length-1]:0;
+    var chipPrev=chipVals.length>5?chipVals[chipVals.length-5]:0;
+    var chipDiff=chipNow-chipPrev;
+    var chipIsPositive=chipNow>=0;
+    var chipTrend='—',chipClr='#999';
+    if(chipVals.length>5){
+      if(chipIsPositive){chipTrend=chipDiff>0?'加仓':'减仓';chipClr=chipDiff>0?'#cf1322':'#3cb371';}
+      else{chipTrend=chipDiff>0?'缓解':'加重';chipClr=chipDiff>0?'#faad14':'#3cb371';}
+    }
+    chipNow=chipNow.toFixed(1);
+    var chipClrVal=chipIsPositive?'#cf1322':'#3cb371';
 
     // MACD
     var md=kl.map(function(b){return b.macd}).filter(Boolean).slice(-35);
@@ -252,7 +272,8 @@ Page({
       dualCross:dc,hasDualCross:dc.length>0?1:0,
       limitPred:lp,hasLimitPred:lp?1:0,
       ffData:ffD,ffLatest:ffL,ffCount:ffD.length,
-      chipNow:chipNow,chipTrend:chipTrend,
+      ffSummary:ffSummary,ffInDays:ffInDays,ffSum5:$(ffSum5),ffSum5Val:ffSum5,ffDominant:ffDominant,ffIn:ffIn?1:0,
+      chipNow:chipNow,chipTrend:chipTrend,chipClr:chipClr,chipClrVal:chipClrVal,
 
       macdBars:mb,macdSummary:(lm.dif?'· '+(lm.dif>lm.dea?'多头':'空头'):''),
       macdDif:$(lm.dif),macdDea:$(lm.dea),macdBarVal:$(lm.macd),macdBarCls:(lm.macd||0)>=0?'up':'down',

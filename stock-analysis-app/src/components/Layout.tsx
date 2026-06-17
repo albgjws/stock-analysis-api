@@ -24,7 +24,6 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }
 
   const fetchIdx = useCallback(() => {
-    if (!isMarketOpen()) return;
     getMarketIndices().then(setIndices).catch(() => {});
   }, []);
 
@@ -35,8 +34,9 @@ export default function AppLayout({ children }: AppLayoutProps) {
   }, [fetchIdx]);
 
   return (
-    <AntLayout style={{ minHeight: '100vh', overflowX: 'hidden' }}>
+    <AntLayout style={{ minHeight: '100vh', overflow: 'visible' }}>
       <Header
+        className="app-header"
         style={{
           background: '#fff',
           borderBottom: '1px solid #f0f0f0',
@@ -52,6 +52,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
       >
         <Link
           to="/"
+          className="header-logo"
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -68,15 +69,15 @@ export default function AppLayout({ children }: AppLayoutProps) {
 
         {/* 大盘指数 */}
         {indices && indices.length > 0 && (
-          <div style={{
-            display: 'flex', gap: 12, marginLeft: 'auto',
-            alignItems: 'center', overflowX: 'auto',
+          <div className="header-indices" style={{
+            display: 'flex', gap: 12,
+            alignItems: 'center',
           }}>
             {indices.map((idx: any) => {
               const isUp = idx.change >= 0;
               const clr = isUp ? '#cf1322' : '#3cb371';
               return (
-                <div key={idx.code} style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                <div key={idx.code} style={{ textAlign: 'center' }}>
                   <span style={{ fontSize: 11, color: '#999', marginRight: 4 }}>{idx.name}</span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: clr }}>{idx.price.toFixed(2)}</span>
                   <span style={{ fontSize: 11, fontWeight: 500, color: clr, marginLeft: 3 }}>

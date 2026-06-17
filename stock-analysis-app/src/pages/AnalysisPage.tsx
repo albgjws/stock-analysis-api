@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Space, Tag } from 'antd';
+import { Button, Space, Tag, Card } from 'antd';
 import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { useStockAnalysis } from '../hooks/useStockData';
 import { useTabContext } from '../context/TabContext';
@@ -308,6 +308,105 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       {/* 技术指标 — 仅当有K线时 */}
       {hasKline && <IndicatorCharts data={recentKline} fundFlow={fundFlow} />}
 
+      {/* 筹码集中度 */}
+      {fundFlow && fundFlow.length >= 5 && (
+        <Card size="small" title="🎯 筹码集中度" style={{ borderRadius: 8, marginBottom: 16, border: '1px solid #d3adf7' }} styles={{ body: { padding: '10px 16px' } }}>
+          <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(() => {
+              let cumSum = 0;
+              const chipVals = fundFlow.map(f => {
+                const big = (f.superLargeNetInflowPercent||0) + (f.largeNetInflowPercent||0);
+                const small = (f.mediumNetInflowPercent||0) + (f.smallNetInflowPercent||0);
+                cumSum += (big - small);
+                return cumSum;
+              });
+              const chipNow = chipVals.length > 0 ? chipVals[chipVals.length-1] : 0;
+              const chipPrev = chipVals.length > 5 ? chipVals[chipVals.length-5] : 0;
+              const chipDiff = chipNow - chipPrev;
+              // 趋势判断：相对于零轴的方向
+              const chipIsPositive = chipNow >= 0;
+              let trendText = '—';
+              let trendClr = '#999';
+              if (chipVals.length > 5) {
+                if (chipIsPositive) {
+                  // 正值区：上升=主力加仓，下降=主力减仓
+                  trendText = chipDiff > 0 ? '加仓' : '减仓';
+                  trendClr = chipDiff > 0 ? '#cf1322' : '#3cb371';
+                } else {
+                  // 负值区：上升=抛压缓解，下降=抛压加重
+                  trendText = chipDiff > 0 ? '缓解' : '加重';
+                  trendClr = chipDiff > 0 ? '#faad14' : '#3cb371';
+                }
+              }
+              return (
+                <>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: chipIsPositive ? '#cf1322' : '#3cb371' }}>{chipNow.toFixed(1)}</div>
+                    <div style={{ fontSize: 11, color: '#999' }}>当前集中度</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: trendClr }}>{trendText}</div>
+                    <div style={{ fontSize: 11, color: '#999' }}>近期趋势</div>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#999', maxWidth: 300 }}>
+                    正集中=主力吸筹·负集中=主力发散·{chipIsPositive ? '加仓=持续吸筹' : '缓解=抛压减弱'} · 持续{chipNow < 0 ? '加重' : '减仓'}=注意风险
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
+      )}
+
+      {/* 主力资金流总结 */}
+      {fundFlow && fundFlow.length > 0 && (
+        <Card size="small" title="💰 主力资金流" style={{ borderRadius: 8, marginBottom: 16, border: '1px solid #ffccc7' }} styles={{ body: { padding: '10px 16px' } }}>
+          <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(() => {
+              const last = fundFlow[fundFlow.length - 1];
+              const mainPct = last?.mainNetInflowPercent || 0;
+              const isMainIn = mainPct > 0;
+              // 最近5天主力净流入天数
+              const last5 = fundFlow.slice(-5);
+              const inDays = last5.filter((d: any) => (d.mainNetInflowPercent || 0) > 0).length;
+              // 最近5天累计主力净占比
+              const sum5 = last5.reduce((s: number, d: any) => s + (d.mainNetInflowPercent || 0), 0);
+              // 文字总结
+              let summary = '';
+              if (isMainIn && inDays >= 3) summary = '主力连续净流入，资金积极做多';
+              else if (isMainIn) summary = '主力今日净流入，关注持续性';
+              else if (inDays <= 1 && sum5 < -2) summary = '主力持续流出，资金态度偏空';
+              else if (inDays <= 1) summary = '主力近期以流出为主，谨慎观望';
+              else summary = '主力进出交替，方向不明确';
+
+              return (
+                <>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: isMainIn ? '#cf1322' : '#3cb371' }}>
+                      {mainPct > 0 ? '+' : ''}{mainPct.toFixed(2)}%
+                    </div>
+                    <div style={{ fontSize: 11, color: '#999' }}>今日主力净占比</div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: inDays >= 3 ? '#cf1322' : inDays <= 1 ? '#3cb371' : '#faad14' }}>
+                      {inDays}/5天
+                    </div>
+                    <div style={{ fontSize: 11, color: '#999' }}>近5日净流入天数</div>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#333', marginBottom: 4 }}>{summary}</div>
+                    <div style={{ fontSize: 11, color: '#999', lineHeight: 1.6 }}>
+                      近5日累计净占比 <b style={{ color: sum5 >= 0 ? '#cf1322' : '#3cb371' }}>{sum5 > 0 ? '+' : ''}{sum5.toFixed(2)}%</b>
+                      · {inDays >= 3 ? '✅ 多头主导' : inDays <= 1 ? '❌ 空头主导' : '⚪ 多空拉锯'}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
+      )}
+
       {/* 涨停/跌停连板预测 */}
       {limitPrediction && <LimitPredictionBanner prediction={limitPrediction} />}
 
@@ -316,6 +415,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       {/* 预测 — 仅当有K线时 */}
       {hasKline && <PredictionChart kline={kline} prediction={prediction} loading={loading} />}
+
+      {/* 预测回测 */}
+      {hasKline && <BacktestReport code={info.code} visible={hasKline} />}
 
       {/* 买入诊断 */}
       <PurchaseAnalysis key={info.code} stockCode={info.code} stockName={info.name} />

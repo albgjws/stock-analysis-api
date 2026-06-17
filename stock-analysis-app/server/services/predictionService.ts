@@ -1,10 +1,17 @@
 import ARIMA from 'arima';
 import type { KlineBar, ForecastPoint, PredictionResult } from '../types';
+import { PredictionCorrectionService } from './predictionCorrectionService';
 
 // ARIMA's TypeScript types are wrong for auto mode — cast in constructor calls
 type ArimaArgs = ConstructorParameters<typeof ARIMA>[0];
 
 export class PredictionService {
+  private correction: PredictionCorrectionService;
+
+  constructor() {
+    this.correction = new PredictionCorrectionService();
+  }
+
   async predict(
     klineData: KlineBar[],
     predictDays: number
@@ -43,11 +50,11 @@ export class PredictionService {
     return this.predictWithSMA(prices, klineData, predictDays);
   }
 
-  private predictWithDrift(
+  private async predictWithDrift(
     prices: number[],
     klineData: KlineBar[],
     predictDays: number
-  ): PredictionResult {
+  ): Promise<PredictionResult> {
     const lastPrice = prices[prices.length - 1];
 
     // Calculate recent trend (last 10-20 days)
@@ -55,14 +62,22 @@ export class PredictionService {
     const mediumTermReturn = (prices[prices.length - 1] - prices[prices.length - 20]) / prices[prices.length - 20];
 
     // Weighted drift: more weight on short-term
-    const dailyDrift = (shortTermReturn * 0.7 + mediumTermReturn * 0.3) / 5;
+    let dailyDrift = (shortTermReturn * 0.7 + mediumTermReturn * 0.3) / 5;
 
     // Historical daily volatility (standard deviation of daily returns)
     const returns: number[] = [];
     for (let i = 1; i < prices.length; i++) {
       returns.push(Math.abs(prices[i] - prices[i - 1]) / prices[i - 1]);
     }
-    const dailyVolatility = this.standardDeviation(returns.slice(-60));
+    let dailyVolatility = this.standardDeviation(returns.slice(-60));
+
+    // 自适应校正：根据历史误差调整 drift 和 volatility
+    try {
+      const condition = await this.correction.getMarketCondition();
+      const params = this.correction.getAdjustedParams(condition);
+      dailyDrift *= params.driftMultiplier;
+      dailyVolatility *= params.volatilityMultiplier;
+    } catch {} // 校正失败不影响主流程
 
     // Try ARIMA for trend direction signal only
     try {

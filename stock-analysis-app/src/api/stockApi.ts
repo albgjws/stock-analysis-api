@@ -76,4 +76,11 @@ export async function getMarketIndices(): Promise<any[]> {
   return res.json();
 }
 
+export async function getCorrectionReport(): Promise<any[]> {
+  const url = `${BASE_URL}/correction-report`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export { ApiError, NotFoundError };

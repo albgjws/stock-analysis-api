@@ -5,6 +5,7 @@ import { SignalService } from '../services/signalService';
 import { PurchaseAnalysisService } from '../services/purchaseAnalysisService';
 import { CacheService } from '../services/cacheService';
 import { PredictionHistoryService } from '../services/predictionHistoryService';
+import { PredictionCorrectionService } from '../services/predictionCorrectionService';
 import { config } from '../config';
 import type { PredictionResult, SignalResult } from '../types';
 
@@ -15,6 +16,7 @@ const signalService = new SignalService();
 const purchaseAnalysisService = new PurchaseAnalysisService();
 const cache = new CacheService();
 const predHistoryService = new PredictionHistoryService();
+const correctionService = new PredictionCorrectionService();
 
 // GET /api/stock/:code/intraday — 当日分时图数据
 router.get('/:code/intraday', async (req: Request, res: Response, next: NextFunction) => {
@@ -222,6 +224,32 @@ router.get('/:code/backtest', async (req: Request, res: Response, next: NextFunc
       indicators: { ma: { periods: [5] } },
     });
     const result = predHistoryService.backtest(code, kline);
+
+    // 自动记录偏差到校正系统
+    if (result.metrics && result.record) {
+      try {
+        const record = result.record;
+        const actualChange = result.actualBars && result.actualBars.length > 1
+          ? ((result.actualBars[result.actualBars.length-1].close - result.actualBars[0].close) / result.actualBars[0].close) * 100
+          : 0;
+        const predictedChange = record.forecast.length > 0
+          ? ((record.forecast[record.forecast.length-1].value - record.lastPrice) / record.lastPrice) * 100
+          : 0;
+        const condition = await correctionService.getMarketCondition();
+
+        correctionService.recordError({
+          date: record.date,
+          code,
+          predictedChange,
+          actualChange,
+          error: result.metrics.mae,
+          direction: result.metrics.directionCorrect,
+          volatilityRatio: kline.length > 20 ? 1.0 : 1.0,
+          marketCondition: condition,
+        });
+      } catch {}
+    }
+
     res.json(result);
   } catch (err) {
     next(err);

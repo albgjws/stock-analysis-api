@@ -286,6 +286,9 @@ export default function KlineChart({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>📊 K线图</span>
+            <span style={{ fontSize: 12, color: '#999', fontWeight: 'normal' }}>
+              {data.length}条 · {data[data.length-1]?.date || ''}
+            </span>
             {signals && (
               <span>
                 {(signals.overall === 'STRONG_BUY' || signals.overall === 'BUY') && <span style={{ background: '#cf1322', color: '#fff', padding: '2px 10px', borderRadius: 4, fontSize: 13, fontWeight: 'bold' }}>📈 买入</span>}
