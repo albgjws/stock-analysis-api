@@ -35,7 +35,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   const { code: paramCode } = useParams<{ code: string }>();
   const code = propCode || paramCode;
   const isActive = propIsActive ?? true;
-  const { addTab } = useTabContext();
+  const { addTab, updateQuote } = useTabContext();
 
   const { data, loading, error, isNotFound, retry } = useStockAnalysis(code);
 
@@ -157,6 +157,15 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       turnoverRate: liveQuote.turnoverRate ?? data.info.turnoverRate,
     };
   }, [data, liveQuote]);
+
+  // 推送实时报价到Tab标签
+  useEffect(() => {
+    if (!code || !liveQuote?.price) return;
+    updateQuote(code, {
+      price: liveQuote.price,
+      changePercent: liveQuote.changePercent || 0,
+    });
+  }, [code, liveQuote?.price, liveQuote?.changePercent]);
 
   // 生成复盘报告
   const recap: MarketRecapResult | null = useMemo(() => {

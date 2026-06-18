@@ -5,6 +5,11 @@ export interface StockTab {
   name: string;
 }
 
+export interface TabQuote {
+  price: number;
+  changePercent: number;
+}
+
 interface TabContextValue {
   tabs: StockTab[];
   activeKey: string;
@@ -13,6 +18,8 @@ interface TabContextValue {
   switchTab: (code: string) => void;
   moveTab: (fromIndex: number, toIndex: number) => void;
   isActive: (code: string) => boolean;
+  quoteMap: Record<string, TabQuote>;
+  updateQuote: (code: string, quote: TabQuote) => void;
 }
 
 const TabContext = createContext<TabContextValue>(null!);
@@ -20,6 +27,11 @@ const TabContext = createContext<TabContextValue>(null!);
 export function TabProvider({ children }: { children: React.ReactNode }) {
   const [tabs, setTabs] = useState<StockTab[]>([]);
   const [activeKey, setActiveKey] = useState<string>('home');
+  const [quoteMap, setQuoteMap] = useState<Record<string, TabQuote>>({});
+
+  const updateQuote = useCallback((code: string, quote: TabQuote) => {
+    setQuoteMap(prev => ({ ...prev, [code]: quote }));
+  }, []);
 
   const addTab = useCallback((code: string, name: string) => {
     setTabs(prev => {
@@ -62,7 +74,7 @@ export function TabProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <TabContext.Provider value={{ tabs, activeKey, addTab, removeTab, switchTab, moveTab, isActive }}>
+    <TabContext.Provider value={{ tabs, activeKey, addTab, removeTab, switchTab, moveTab, isActive, quoteMap, updateQuote }}>
       {children}
     </TabContext.Provider>
   );

@@ -6,7 +6,7 @@ import AnalysisPage from './pages/AnalysisPage';
 import { TabProvider, useTabContext } from './context/TabContext';
 
 function AppContent() {
-  const { tabs, activeKey, addTab, removeTab, switchTab, moveTab } = useTabContext();
+  const { tabs, activeKey, addTab, removeTab, switchTab, moveTab, quoteMap } = useTabContext();
   const dragRef = useRef<number | null>(null);
 
   const onEdit = (targetKey: React.MouseEvent | React.KeyboardEvent | string, action: 'add' | 'remove') => {
@@ -71,9 +71,14 @@ function AppContent() {
                   animation: 'pulse 1.5s ease-in-out infinite',
                 }} />
                 {tab.name}
-                <span style={{ color: '#999', fontSize: 11, marginLeft: 4 }}>
-                  {tab.code}
-                </span>
+                {quoteMap[tab.code] && (
+                  <span style={{
+                    fontSize: 11, fontWeight: 600, marginLeft: 4,
+                    color: (quoteMap[tab.code].changePercent || 0) >= 0 ? '#cf1322' : '#3cb371',
+                  }}>
+                    {(quoteMap[tab.code].changePercent || 0) >= 0 ? '+' : ''}{quoteMap[tab.code].changePercent.toFixed(2)}%
+                  </span>
+                )}
               </span>
             ),
             children: (
