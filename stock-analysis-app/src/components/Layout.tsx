@@ -20,7 +20,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
     const h = d.getHours(), m = d.getMinutes();
     if (d.getDay() === 0 || d.getDay() === 6) return false;
     const t = h * 100 + m;
-    return (t >= 930 && t < 1130) || (t >= 1300 && t < 1500);
+    return (t >= 915 && t < 1130) || (t >= 1300 && t < 1500);
   }
 
   const fetchIdx = useCallback(() => {

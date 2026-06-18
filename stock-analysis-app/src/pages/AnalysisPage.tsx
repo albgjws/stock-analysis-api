@@ -119,8 +119,8 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     const now = new Date();
     const h = now.getHours(), m = now.getMinutes();
     const time = h * 100 + m;
-    // 只在交易时段（9:30-15:00）内才设定收盘定时器
-    if (time < 930 || time >= 1505) return;
+    // 只在交易时段（9:15-15:00）内才设定收盘定时器
+    if (time < 915 || time >= 1505) return;
 
     const closeTime = new Date();
     closeTime.setHours(15, 1, 0, 0);

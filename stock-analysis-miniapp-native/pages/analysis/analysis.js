@@ -335,7 +335,7 @@ Page({
     var d=new Date(),h=d.getHours(),m=d.getMinutes(),day=d.getDay();
     if(day===0||day===6)return 0; // 周末
     var t=h*60+m;
-    return(t>=570&&t<690)||(t>=780&&t<900)?1:0; // 9:30-11:30, 13:00-15:00
+    return(t>=555&&t<690)||(t>=780&&t<900)?1:0; // 9:15-11:30, 13:00-15:00
   },
 
   startPolling(){
@@ -400,7 +400,7 @@ Page({
     var me=this;
     var now=new Date(),h=now.getHours(),m=now.getMinutes();
     var t=h*100+m;
-    if(t<930||t>=1505)return;
+    if(t<915||t>=1505)return;
     var ct=new Date();ct.setHours(15,1,0,0);
     var delay=ct.getTime()-now.getTime();
     if(delay<=0)return;

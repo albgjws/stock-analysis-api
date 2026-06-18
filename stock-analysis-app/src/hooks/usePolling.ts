@@ -8,8 +8,8 @@ function isMarketOpen(): boolean {
   const h = now.getHours();
   const m = now.getMinutes();
   const time = h * 100 + m;
-  // 早盘 9:30-11:30
-  if (time >= 930 && time < 1130) return true;
+  // 早盘 9:15-11:30
+  if (time >= 915 && time < 1130) return true;
   // 午盘 13:00-15:00
   if (time >= 1300 && time < 1500) return true;
   return false;
