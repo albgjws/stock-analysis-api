@@ -34,6 +34,7 @@ Page({
     slText:'',slReason:'',tpText:'',tpReason:'',
 
     bt:null,btDirClr:'',btDirTxt:'',btMae:'',btMax:'',btWithin:'',
+    crScore:0,crProb:50,crSummary:'',crRating:'中性震荡',crGood:0,crBad:0,
 
     buyVal:'',diag:null,diagScoreCls:'',diagProbCls:'',diagProbTxt:'',diagSlText:'',diagTpText:'',
   },
@@ -141,17 +142,20 @@ Page({
 
     // 涨停/跌停连板预测
     var lp=null;
-    // 用K线实际收盘价验证是否涨停/跌停
-    var lastBar=kl.length>0?kl[kl.length-1]:null;
-    var prevBar2=kl.length>1?kl[kl.length-2]:null;
-    var klinePct=lastBar&&prevBar2?((lastBar.close-prevBar2.close)/prevBar2.close*100):0;
-    var chPct=info.changePercent||0;
-    // 避免小涨跌幅被误判，用K线校准
-    var effPct=Math.abs(chPct)>Math.abs(klinePct)*1.5?klinePct:chPct;
-    var isST=(info.name||'').indexOf('ST')>=0;
-    var limitPct=isST?4.8:9.6;
-    if(effPct>=limitPct||effPct<=-limitPct){
-      var isUp=effPct>=limitPct;
+    // 优先使用接口返回的涨跌停价
+    var isUp=false,isDown=false;
+    if(info.limitUp!=null&&info.price>=info.limitUp-0.01)isUp=true;
+    if(info.limitDown!=null&&info.price<=info.limitDown+0.01)isDown=true;
+    // 降级：用百分比判断
+    if(!isUp&&!isDown&&!info.limitUp&&!info.limitDown){
+      var lastBar=kl.length>0?kl[kl.length-1]:null;
+      var prevBar2=kl.length>1?kl[kl.length-2]:null;
+      var klinePct=lastBar&&prevBar2?((lastBar.close-prevBar2.close)/prevBar2.close*100):0;
+      var chPct=info.changePercent||0;
+      var effPct=Math.abs(chPct)>Math.abs(klinePct)*1.5?klinePct:chPct;
+      isUp=effPct>=9.6;isDown=effPct<=-9.6;
+    }
+    if(isUp||isDown){
       var avgVol=0;for(var i=Math.max(0,kl.length-20);i<kl.length;i++)avgVol+=kl[i].volume;
       avgVol=avgVol/Math.min(20,kl.length);
       var volRate=avgVol>0?((info.volume||0)/avgVol):1;
@@ -159,7 +163,7 @@ Page({
       var lc=1;
       for(var i=kl.length-2;i>=0&&i>=kl.length-6;i--){
         var b=kl[i],p2=i>0?kl[i-1]:null;
-        if(p2&&p2.close>0){var pct2=(b.close-p2.close)/p2.close*100;if(isUp&&pct2>=limitPct-1)lc++;else if(!isUp&&pct2<=-(limitPct-1))lc++;else break;}
+        if(p2&&p2.close>0){var pct2=(b.close-p2.close)/p2.close*100;if(isUp&&pct2>=8.6)lc++;else if(!isUp&&pct2<=-8.6)lc++;else break;}
         else break;
       }
       // 概率计算
@@ -301,11 +305,48 @@ Page({
       tpText:$Y(sig.takeProfit&&sig.takeProfit.price),tpReason:sig.takeProfit&&sig.takeProfit.reason||'',
 
       bt:bt,
+
+      // 收盘评分计算
+      var crScore=0,crProb=50,crSummary='',crR='中性震荡',crGood=0,crBad=0;
+      var crDetails=[];
+      // KDJ
+      if(lb.kdj&&lk.d!=null&&lk.k!=null){
+        var kdjS=0;
+        if(lk.k>lk.d&&lk.k<40)kdjS=18;else if(lk.k>lk.d&&lk.k<60)kdjS=12;else if(lk.k>lk.d)kdjS=6;else if(lk.k<lk.d&&lk.k>60)kdjS=-18;else if(lk.k<lk.d)kdjS=-8;
+        if(lk.j>100)kdjS-=5;if(lk.j<0)kdjS+=5;
+        crScore+=kdjS;crDetails.push(kdjS>0);if(kdjS>0)crGood++;else crBad++;
+      }
+      // MACD
+      if(lb.macd&&kl.length>1){var pm=kl[kl.length-2].macd;if(pm){var mS=0;
+        if(lb.macd.dif>lb.macd.dea&&lb.macd.macd>0)mS=12;else if(lb.macd.dif>lb.macd.dea)mS=6;else if(lb.macd.dif<lb.macd.dea&&lb.macd.macd<0)mS=-12;else mS=-6;
+        if(lb.macd.macd>pm.macd)mS+=3;else mS-=3;
+        crScore+=mS;if(mS>0)crGood++;else crBad++;
+      }}
+      // RSI
+      if(rn!=null){var rS=rn<30?12:rn<45?8:rn<55?2:rn<70?-4:-12;crScore+=rS;if(rS>0)crGood++;else crBad++;}
+      // 均线
+      if(lb.ma){var maS=0;if(lb.close>lb.ma.ma5&&lb.ma.ma5>lb.ma.ma10&&lb.ma.ma10>lb.ma.ma20)maS=15;else if(lb.close>lb.ma.ma5&&lb.ma.ma5>lb.ma.ma10)maS=10;else if(lb.close>lb.ma.ma20)maS=5;else if(lb.ma.ma60&&lb.close<lb.ma.ma60)maS=-15;else if(lb.close<lb.ma.ma20)maS=-10;else if(lb.close<lb.ma.ma10)maS=-5;
+        crScore+=maS;if(maS>0)crGood++;else crBad++;}
+      // 成交量
+      if(avg>0){var vr=tv/avg,dir=lb.changePercent||0,vS=0;
+        if(dir>0&&vr>1.5)vS=12;else if(dir>0&&vr>1)vS=8;else if(dir>0)vS=4;else if(dir<0&&vr<0.7)vS=4;else if(dir<0&&vr>1.5)vS=-12;else if(dir<0)vS=-6;
+        crScore+=vS;if(vS>0)crGood++;else crBad++;}
+      // 布林带
+      if(lb.boll&&lb.boll.upper>lb.boll.lower){var pos=(lb.close-lb.boll.lower)/(lb.boll.upper-lb.boll.lower);
+        var bS=pos<0.1?8:pos<0.3?5:pos<0.5?2:pos<0.7?-2:pos<0.9?-5:-8;
+        crScore+=bS;if(bS>0)crGood++;else crBad++;}
+      crScore=Math.max(-100,Math.min(100,crScore));
+      crProb=Math.round(((crScore+100)/200)*100);
+      if(crScore>=50){crR='强烈看涨';}else if(crScore>=20){crR='看涨';}else if(crScore<=-50){crR='强烈看跌';}else if(crScore<=-20){crR='看跌';}
+      crSummary=crGood>=5?'多项指标共振向好，明日看涨概率较高':crBad>=5?'多项指标偏空，注意回调风险':crGood>crBad?'指标偏多，谨慎看涨':crBad>crGood?'指标偏空，注意风险':'指标中性，方向不明确';
       btDirClr:bt&&bt.metrics&&bt.metrics.directionCorrect?'#52c41a':'#ff4d4f',
       btDirTxt:bt&&bt.metrics&&bt.metrics.directionCorrect?'正确':'错误',
       btMae:'¥'+((bt&&bt.metrics&&bt.metrics.mae)||0).toFixed(2),
       btMax:'¥'+((bt&&bt.metrics&&bt.metrics.maxError)||0).toFixed(2),
       btWithin:((bt&&bt.metrics&&bt.metrics.within80)||0)+'%',
+
+      // 收盘评分
+      crScore:crScore,crProb:crProb,crSummary:crSummary,crRating:crR,crGood:crGood,crBad:crBad,
     });
   },
 

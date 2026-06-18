@@ -139,6 +139,8 @@ export class StockDataService {
       turnoverRate: Math.round(turnoverRate * 100) / 100,
       bid: (q as any).bid || null,
       ask: (q as any).ask || null,
+      limitUp: (q as any).limitUp || null,
+      limitDown: (q as any).limitDown || null,
     };
   }
 

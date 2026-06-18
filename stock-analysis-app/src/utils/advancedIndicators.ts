@@ -587,28 +587,30 @@ export interface LimitPrediction {
  *   3. 当前连板位置（1板成功率最高）
  *   4. 技术指标位置（KDJ/RSI空间）
  */
-export function calcLimitPrediction(kline: KlineBar[], info: { price: number; changePercent: number; volume: number; marketCap: number; prevClose?: number }): LimitPrediction | null {
+export function calcLimitPrediction(kline: KlineBar[], info: { price: number; changePercent: number; volume: number; marketCap: number; prevClose?: number; limitUp?: number | null; limitDown?: number | null }): LimitPrediction | null {
   if (!kline || kline.length < 5) return null;
 
-  // stock-sdk 的 changePercent 一直是百分比格式（10.0=涨10%, -5.2=跌5.2%）
-  const chgPct = info.changePercent;
-  const isST = false; // ST标记不准确，通过上一条K线判断
+  // 优先使用接口返回的涨跌停价
+  let isLimitUp = false, isLimitDown = false;
+  if (info.limitUp != null && info.price >= info.limitUp - 0.01) isLimitUp = true;
+  if (info.limitDown != null && info.price <= info.limitDown + 0.01) isLimitDown = true;
 
-  // 用K线收盘价验证是否真的涨停/跌停
-  const lastBar = kline[kline.length - 1];
-  const prevBar = kline.length > 1 ? kline[kline.length - 2] : null;
-  if (!lastBar || !prevBar) return null;
-
-  // 从K线计算实际涨跌幅
-  const klineChgPct = ((lastBar.close - prevBar.close) / prevBar.close) * 100;
-  // 取min确保数据的可靠性
-  const effectivePct = Math.abs(chgPct) > Math.abs(klineChgPct) * 1.5 ? klineChgPct : chgPct;
-
-  const limitPct = isST ? 4.8 : 9.6;
-  const isLimitUp = effectivePct >= limitPct;
-  const isLimitDown = effectivePct <= -limitPct;
+  // 降级：没有涨跌停价时用百分比判断
+  if (!isLimitUp && !isLimitDown && !info.limitUp && !info.limitDown) {
+    const lastBar = kline[kline.length - 1];
+    const prevBar = kline.length > 1 ? kline[kline.length - 2] : null;
+    if (!lastBar || !prevBar) return null;
+    const klineChgPct = ((lastBar.close - prevBar.close) / prevBar.close) * 100;
+    const chgPct = info.changePercent;
+    const effectivePct = Math.abs(chgPct) > Math.abs(klineChgPct) * 1.5 ? klineChgPct : chgPct;
+    const limitPct = 9.6;
+    isLimitUp = effectivePct >= limitPct;
+    isLimitDown = effectivePct <= -limitPct;
+  }
 
   if (!isLimitUp && !isLimitDown) return null;
+
+  const limitPct = 9.6;
 
   // 计算成交量比率（今日量 / 20日均量）
   const recentVols = kline.slice(-20).map(b => b.volume);
@@ -636,8 +638,8 @@ export function calcLimitPrediction(kline: KlineBar[], info: { price: number; ch
   // 因子1：成交量（缩量封板→强）
   if (isLimitUp) {
     if (volRatio < 0.5) { prob += 20; factors.push('缩量封板，筹码锁定良好'); }
-    else if (volRatio < 0.8) { prob += 10; factors.push('量能适中，封板质量较高'); }
-    else if (volRatio < 1.2) { prob += 0; factors.push('量能正常'); }
+    else if (volRatio < 0.8) { prob += 15; factors.push('量能适中，封板质量较高'); }
+    else if (volRatio < 1.2) { prob += 5; factors.push('量能正常'); }
     else { prob -= 10; factors.push('放量封板，分歧较大'); }
   } else {
     if (volRatio < 0.5) { prob += 5; factors.push('缩量跌停，抛压未释放充分'); }
@@ -668,6 +670,17 @@ export function calcLimitPrediction(kline: KlineBar[], info: { price: number; ch
     else { prob -= 10; factors.push('KDJ严重超买，回调风险大'); }
   }
 
+  // 因子5：RSI位置（超卖超买修正）
+  if (last?.rsi?.rsi6 != null) {
+    const rsi6 = last.rsi.rsi6;
+    if (isLimitUp) {
+      if (rsi6 > 80) { prob -= 8; factors.push('RSI严重超买，注意炸板风险'); }
+      else if (rsi6 < 40) { prob += 8; factors.push('RSI低位，上涨空间充足'); }
+    } else {
+      if (rsi6 < 20) { prob -= 5; factors.push('RSI深度超卖，跌停可能打开'); }
+    }
+  }
+
   // 限幅
   prob = Math.max(5, Math.min(95, prob));
 
@@ -687,6 +700,111 @@ export function calcLimitPrediction(kline: KlineBar[], info: { price: number; ch
     analysis,
     factors,
   };
+}
+
+// ---------- 收盘评分（明日看涨概率）----------
+export interface CloseRating {
+  score: number;
+  upProb: number;
+  rating: 'strong_bull' | 'bull' | 'neutral' | 'bear' | 'strong_bear';
+  ratingLabel: string;
+  details: { name: string; score: number; maxScore: number; status: string }[];
+  summary: string;
+}
+
+export function calcCloseRating(kline: KlineBar[], fundFlow?: any[] | null): CloseRating | null {
+  if (!kline || kline.length < 20) return null;
+  const last = kline[kline.length - 1];
+  const prev = kline.length > 1 ? kline[kline.length - 2] : null;
+  if (!last) return null;
+  const details: { name: string; score: number; maxScore: number; status: string }[] = [];
+  let total = 0;
+
+  if (last.kdj) {
+    let s = 0;
+    if (last.kdj.k > last.kdj.d && last.kdj.k < 40) s = 18;
+    else if (last.kdj.k > last.kdj.d && last.kdj.k < 60) s = 12;
+    else if (last.kdj.k > last.kdj.d) s = 6;
+    else if (last.kdj.k < last.kdj.d && last.kdj.k > 60) s = -18;
+    else if (last.kdj.k < last.kdj.d) s = -8;
+    if (last.kdj.j > 100) s -= 5;
+    if (last.kdj.j < 0) s += 5;
+    total += s; details.push({ name: 'KDJ', score: s, maxScore: 20, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  if (last.macd && prev?.macd) {
+    let s = 0;
+    if (last.macd.dif > last.macd.dea && last.macd.macd > 0) s = 12;
+    else if (last.macd.dif > last.macd.dea) s = 6;
+    else if (last.macd.dif < last.macd.dea && last.macd.macd < 0) s = -12;
+    else s = -6;
+    if (last.macd.macd > prev.macd.macd) s += 3; else s -= 3;
+    total += s; details.push({ name: 'MACD', score: s, maxScore: 15, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  if (last.rsi?.rsi6 != null) {
+    const r = last.rsi.rsi6;
+    let s = r < 30 ? 12 : r < 45 ? 8 : r < 55 ? 2 : r < 70 ? -4 : -12;
+    total += s; details.push({ name: 'RSI', score: s, maxScore: 15, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  if (last.ma) {
+    const { ma5, ma10, ma20, ma60 } = last.ma;
+    let s = 0;
+    if (ma5 && ma10 && ma20) {
+      if (last.close > ma5 && ma5 > ma10 && ma10 > ma20) s = 15;
+      else if (last.close > ma5 && ma5 > ma10) s = 10;
+      else if (last.close > ma20) s = 5;
+      else if (ma60 && last.close < ma60) s = -15;
+      else if (last.close < ma20) s = -10;
+      else if (last.close < ma10) s = -5;
+    }
+    total += s; details.push({ name: '均线', score: s, maxScore: 15, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  if (kline.length >= 20) {
+    const avgVol20 = kline.slice(-20).reduce((a, b) => a + b.volume, 0) / 20;
+    const vr = avgVol20 > 0 ? last.volume / avgVol20 : 1;
+    const dir = last.changePercent ?? 0;
+    let s = 0;
+    if (dir > 0 && vr > 1.5) s = 12;
+    else if (dir > 0 && vr > 1) s = 8;
+    else if (dir > 0) s = 4;
+    else if (dir < 0 && vr < 0.7) s = 4;
+    else if (dir < 0 && vr > 1.5) s = -12;
+    else if (dir < 0) s = -6;
+    total += s; details.push({ name: '成交量', score: s, maxScore: 15, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  if (last.boll) {
+    const pos = (last.close - last.boll.lower) / (last.boll.upper - last.boll.lower);
+    let s = pos < 0.1 ? 8 : pos < 0.3 ? 5 : pos < 0.5 ? 2 : pos < 0.7 ? -2 : pos < 0.9 ? -5 : -8;
+    total += s; details.push({ name: '布林带', score: s, maxScore: 10, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  if (fundFlow && fundFlow.length > 0) {
+    const m = fundFlow[fundFlow.length - 1]?.mainNetInflowPercent || 0;
+    let s = m > 1 ? 5 : m > 0 ? 2 : m > -1 ? -2 : -5;
+    total += s; details.push({ name: '主力资金', score: s, maxScore: 5, status: s > 0 ? 'good' : 'bad' });
+  }
+
+  const score = Math.max(-100, Math.min(100, total));
+  const upProb = Math.round(((score + 100) / 200) * 100);
+  let rating: CloseRating['rating'], ratingLabel: string;
+  if (score >= 50) { rating = 'strong_bull'; ratingLabel = '强烈看涨'; }
+  else if (score >= 20) { rating = 'bull'; ratingLabel = '看涨'; }
+  else if (score <= -50) { rating = 'strong_bear'; ratingLabel = '强烈看跌'; }
+  else if (score <= -20) { rating = 'bear'; ratingLabel = '看跌'; }
+  else { rating = 'neutral'; ratingLabel = '中性震荡'; }
+
+  const good = details.filter(d => d.score > 0).length;
+  const bad = details.filter(d => d.score < 0).length;
+  const summary = good >= 5 ? '多项指标共振向好，明日看涨概率较高'
+    : bad >= 5 ? '多项指标偏空，注意回调风险'
+    : good > bad ? '指标偏多，谨慎看涨'
+    : bad > good ? '指标偏空，注意风险'
+    : '指标中性，方向不明确';
+  return { score, upProb, rating, ratingLabel, details, summary };
 }
 
 // ---------- 统一返回值 ----------

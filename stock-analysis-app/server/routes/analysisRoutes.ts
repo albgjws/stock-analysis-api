@@ -48,6 +48,8 @@ router.get('/:code/quote', async (req: Request, res: Response, next: NextFunctio
       turnoverRate: info.turnoverRate,
       bid: (info as any).bid || null,
       ask: (info as any).ask || null,
+      limitUp: (info as any).limitUp || null,
+      limitDown: (info as any).limitDown || null,
     });
   } catch (err) {
     next(err);

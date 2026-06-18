@@ -131,6 +131,14 @@ async function main() {
           if (hasMacdGolden && hasKdjGolden) { st += 2.5; strat.push('MACD+KDJ双金叉'); }
           if (hasMacdDeath && hasKdjDeath) { st -= 2.5; strat.push('MACD+KDJ双死叉'); }
         }
+        // MACD柱方向修正
+        if (kline.length >= 2) {
+          const lastB = kline[kline.length - 1], prevB = kline[kline.length - 2];
+          if (lastB.macd && prevB.macd) {
+            if (lastB.macd.macd > prevB.macd.macd) { st += 0.5; strat.push('MACD柱伸长'); }
+            else { st -= 0.5; strat.push('MACD柱缩短'); }
+          }
+        }
         if (st >= 2) sig = 'BUY'; else if (st <= -2) sig = 'SELL';
         insSignal.run(code, code, today, sig, st, strat.join(','), last.close, last.changePercent||0);
         totalSignal++;

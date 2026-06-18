@@ -279,6 +279,29 @@
 
     <!-- ===== ⑨ 当日复盘 ===== -->
     <view wx:if="{{hk}}" class="card">
+
+      <!-- 收盘评分 -->
+      <view style="background:#fafafa;border-radius:10rpx;padding:12rpx 14rpx;margin-bottom:12rpx;border:1rpx solid {{crScore>=20?'#ffccc7':crScore<=-20?'#b7eb8f':'#ffe58f'}};">
+        <view class="rw" style="margin-bottom:8rpx;">
+          <text style="font-size:14px;font-weight:600;">📋 今日收盘点评</text>
+          <text class="sig-badge sig-S{{crRating.includes('看涨')?'BUY':crRating.includes('看跌')?'SELL':'HOLD'}}" style="font-size:11px;padding:2rpx 12rpx;">{{crRating}}</text>
+        </view>
+        <view class="rw">
+          <view style="text-align:center;">
+            <text style="font-size:32rpx;font-weight:700;color:{{crProb>=60?'#cf1322':crProb>=40?'#faad14':'#3cb371'}};">{{crProb}}%</text>
+            <text style="display:block;font-size:9px;color:#999;">明日看涨</text>
+          </view>
+          <view style="text-align:center;">
+            <text style="font-size:32rpx;font-weight:700;color:{{crScore>=0?'#cf1322':'#3cb371'}};">{{crScore}}</text>
+            <text style="display:block;font-size:9px;color:#999;">综合评分</text>
+          </view>
+          <view style="flex:1;padding-left:8rpx;">
+            <text style="font-size:12px;color:#333;font-weight:500;">{{crSummary}}</text>
+            <text style="display:block;font-size:10px;color:#999;margin-top:4rpx;">{{crGood}}项看多 · {{crBad}}项看空</text>
+          </view>
+        </view>
+      </view>
+
       <text class="ct">📋 当日专业复盘</text>
       <text class="rc-title">今日行情综述</text>
       <view class="rc-lines"><view class="rc-line">{{r0}}</view><view class="rc-line">{{rVol}}</view></view>

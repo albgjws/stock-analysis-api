@@ -79,6 +79,20 @@ export class PredictionService {
       dailyVolatility *= params.volatilityMultiplier;
     } catch {} // 校正失败不影响主流程
 
+    // MACD柱方向修正漂移
+    try {
+      const last = klineData[klineData.length - 1];
+      const prev = klineData.length > 1 ? klineData[klineData.length - 2] : null;
+      if (last?.macd && prev?.macd) {
+        const macdDelta = last.macd.macd - prev.macd.macd;
+        if (macdDelta > 0) {
+          dailyDrift *= 1.15;  // MACD柱变长 → 动能增强，漂移加大
+        } else {
+          dailyDrift *= 0.85;  // MACD柱变短 → 动能衰减，漂移减小
+        }
+      }
+    } catch {} // 不影响主流程
+
     // Try ARIMA for trend direction signal only
     try {
       const arima = new (ARIMA as any)({ auto: true, p: [0, 3], d: [0, 1], q: [0, 3], verbose: false });

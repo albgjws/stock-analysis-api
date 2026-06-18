@@ -20,11 +20,12 @@ import AdvancedSignalLegend from '../components/AdvancedSignalLegend';
 import PositionAdvice from '../components/PositionAdvice';
 import BacktestReport from '../components/BacktestReport';
 import { generateMarketRecap } from '../utils/marketRecap';
-import { calcAllAdvancedSignals, calcLimitPrediction } from '../utils/advancedIndicators';
+import { calcAllAdvancedSignals, calcLimitPrediction, calcCloseRating } from '../utils/advancedIndicators';
 import type { MarketRecapResult } from '../utils/marketRecap';
-import type { AdvancedSignals, LimitPrediction as LimitPredictionResult } from '../utils/advancedIndicators';
+import type { AdvancedSignals, LimitPrediction as LimitPredictionResult, CloseRating as CloseRatingResult } from '../utils/advancedIndicators';
 import LimitPredictionBanner from '../components/LimitPredictionBanner';
 import Level5Panel from '../components/Level5Panel';
+import CloseRatingCard from '../components/CloseRatingCard';
 
 interface AnalysisPageProps {
   code?: string;
@@ -198,6 +199,12 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     if (!data || !data.kline || data.kline.length < 5) return null;
     return calcLimitPrediction(data.kline, liveInfo || data.info);
   }, [data, liveInfo]);
+
+  // 收盘评分（明日看涨概率）
+  const closeRating: CloseRatingResult | null = useMemo(() => {
+    if (!data || !data.kline || data.kline.length < 20) return null;
+    return calcCloseRating(data.kline, fundFlow);
+  }, [data, fundFlow]);
 
   // 当没有显示检查时
   if (!data) {
@@ -428,6 +435,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       {/* 当日复盘 */}
       <MarketRecap recap={recap!} loading={loading || intradayLoading} />
+
+      {/* 收盘评分 */}
+      {closeRating && <CloseRatingCard rating={closeRating} />}
 
       {/* 预测 — 仅当有K线时 */}
       {hasKline && <PredictionChart kline={kline} prediction={prediction} loading={loading} />}
