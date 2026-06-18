@@ -111,7 +111,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   // 自动轮询：盘中实时分析频率更高，非交易时段不轮询行情
   usePolling(fetchIntraday, isActive && !!code ? 15000 : null, isActive, true);
   usePolling(fetchFundFlow, isActive && !!code ? 60000 : null, isActive, false);
-  usePolling(fetchQuote, isActive && !!code ? 5000 : null, isActive, true);
+  usePolling(fetchQuote, !!code ? 5000 : null, true, true);
 
   // 收盘后（15:01）自动刷新一次获取最终数据
   useEffect(() => {
@@ -158,14 +158,21 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     };
   }, [data, liveQuote]);
 
-  // 推送实时报价到Tab标签
+  // 推送实时报价到Tab标签（有实时数据用实时，没有用分析数据）
   useEffect(() => {
-    if (!code || !liveQuote?.price) return;
-    updateQuote(code, {
-      price: liveQuote.price,
-      changePercent: liveQuote.changePercent || 0,
-    });
-  }, [code, liveQuote?.price, liveQuote?.changePercent]);
+    if (!code) return;
+    if (liveQuote?.price != null) {
+      updateQuote(code, {
+        price: liveQuote.price,
+        changePercent: liveQuote.changePercent || 0,
+      });
+    } else if (data?.info?.price) {
+      updateQuote(code, {
+        price: data.info.price,
+        changePercent: data.info.changePercent || 0,
+      });
+    }
+  }, [code, liveQuote?.price, liveQuote?.changePercent, data?.info?.price, data?.info?.changePercent]);
 
   // 生成复盘报告
   const recap: MarketRecapResult | null = useMemo(() => {
