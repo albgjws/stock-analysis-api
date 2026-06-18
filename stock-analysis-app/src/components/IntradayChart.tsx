@@ -31,49 +31,59 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
     const gradientBottom = isUp ? 'rgba(207,19,34,0.02)' : 'rgba(60,179,113,0.02)';
     const volumeColor = isUp ? '#cf1322' : '#3cb371';
 
-    // 获取信号标记
+    // 获取信号标记 — 在分时走势中寻找技术触发点
     const signalMarkers: any[] = [];
     if (signals) {
       const isBuy = signals.overall === 'STRONG_BUY' || signals.overall === 'BUY';
       const isSell = signals.overall === 'STRONG_SELL' || signals.overall === 'SELL';
+      const minLen = Math.min(times.length, prices.length, avgPrices.length, volumes.length);
 
-      if (isBuy) {
+      // 扫描分时数据找最优买卖点
+      if (isBuy && minLen > 10) {
+        // 买点：价格大幅低于均价后放量反弹的位置
+        let bestIdx = -1, bestScore = -Infinity;
+        for (let i = 5; i < minLen - 3; i++) {
+          const dev = (avgPrices[i] - prices[i]) / avgPrices[i]; // 低于均价的幅度
+          const rebound = prices[i + 2] > prices[i] && prices[i + 1] > prices[i]; // 反弹确认
+          const volSpike = volumes[i] > volumes.slice(Math.max(0, i - 5), i).reduce((a, b) => a + b, 0) / 5 * 1.5;
+          if (dev > 0.005 && rebound) {
+            const score = dev * 1000 + (volSpike ? 5 : 0) + (i < minLen * 0.7 ? 3 : 0);
+            if (score > bestScore) { bestScore = score; bestIdx = i; }
+          }
+        }
+        if (bestIdx < 0) { // 兜底：找当日最低点
+          const dayLow = Math.min(...prices.filter(p => p > 0));
+          bestIdx = prices.indexOf(dayLow);
+        }
         signalMarkers.push({
-          name: '买入信号',
-          coord: [times[times.length - 1], prices[prices.length - 1]],
-          symbol: 'arrow',
-          symbolSize: [30, 30],
-          symbolRotate: 0,
+          name: '买入信号', coord: [times[bestIdx], prices[bestIdx]],
+          symbol: 'arrow', symbolSize: [30, 30], symbolRotate: 0,
           itemStyle: { color: '#cf1322' },
-          label: {
-            formatter: '买入',
-            color: '#fff',
-            backgroundColor: '#cf1322',
-            padding: [4, 8],
-            borderRadius: 4,
-            fontSize: 14,
-            fontWeight: 'bold',
-            position: 'top',
-          },
+          label: { formatter: '买入', color: '#fff', backgroundColor: '#cf1322',
+            padding: [4, 8], borderRadius: 4, fontSize: 14, fontWeight: 'bold', position: 'top' },
         });
-      } else if (isSell) {
+      } else if (isSell && minLen > 10) {
+        // 卖点：价格大幅高于均价后放量滞涨的位置
+        let bestIdx = -1, bestScore = -Infinity;
+        for (let i = 5; i < minLen - 3; i++) {
+          const dev = (prices[i] - avgPrices[i]) / avgPrices[i]; // 高于均价的幅度
+          const fading = prices[i + 1] < prices[i] || prices[i + 2] < prices[i]; // 开始回落
+          const volSpike = volumes[i] > volumes.slice(Math.max(0, i - 5), i).reduce((a, b) => a + b, 0) / 5 * 1.5;
+          if (dev > 0.005 && fading) {
+            const score = dev * 1000 + (volSpike ? 5 : 0) + (i > minLen * 0.3 ? 3 : 0);
+            if (score > bestScore) { bestScore = score; bestIdx = i; }
+          }
+        }
+        if (bestIdx < 0) {
+          const dayHigh = Math.max(...prices.filter(p => p > 0));
+          bestIdx = prices.indexOf(dayHigh);
+        }
         signalMarkers.push({
-          name: '卖出信号',
-          coord: [times[times.length - 1], prices[prices.length - 1]],
-          symbol: 'arrow',
-          symbolSize: [30, 30],
-          symbolRotate: 180,
+          name: '卖出信号', coord: [times[bestIdx], prices[bestIdx]],
+          symbol: 'arrow', symbolSize: [30, 30], symbolRotate: 180,
           itemStyle: { color: '#3cb371' },
-          label: {
-            formatter: '卖出',
-            color: '#fff',
-            backgroundColor: '#3cb371',
-            padding: [4, 8],
-            borderRadius: 4,
-            fontSize: 14,
-            fontWeight: 'bold',
-            position: 'bottom',
-          },
+          label: { formatter: '卖出', color: '#fff', backgroundColor: '#3cb371',
+            padding: [4, 8], borderRadius: 4, fontSize: 14, fontWeight: 'bold', position: 'bottom' },
         });
       }
     }

@@ -203,7 +203,27 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   // 收盘评分（明日看涨概率）
   const closeRating: CloseRatingResult | null = useMemo(() => {
     if (!data || !data.kline || data.kline.length < 20) return null;
-    return calcCloseRating(data.kline, fundFlow);
+    const raw = calcCloseRating(data.kline, fundFlow);
+    if (!raw) return null;
+    // 与综合信号方向对齐
+    const sig = data.signals;
+    const isSignalSell = sig?.overall === 'SELL' || sig?.overall === 'STRONG_SELL';
+    const isSignalBuy = sig?.overall === 'BUY' || sig?.overall === 'STRONG_BUY';
+    if (isSignalSell && (raw.rating === 'strong_bull' || raw.rating === 'bull')) {
+      raw.rating = 'neutral';
+      raw.ratingLabel = '中性（信号偏空）';
+      raw.summary = '综合信号偏空，评分上修空间有限，注意风险';
+      raw.score = Math.min(raw.score, 10);
+      raw.upProb = Math.min(raw.upProb, 50);
+    }
+    if (isSignalBuy && (raw.rating === 'strong_bear' || raw.rating === 'bear')) {
+      raw.rating = 'neutral';
+      raw.ratingLabel = '中性（信号偏多）';
+      raw.summary = '综合信号偏多，评分下修空间有限，谨慎看涨';
+      raw.score = Math.max(raw.score, -10);
+      raw.upProb = Math.max(raw.upProb, 50);
+    }
+    return raw;
   }, [data, fundFlow]);
 
   // 当没有显示检查时

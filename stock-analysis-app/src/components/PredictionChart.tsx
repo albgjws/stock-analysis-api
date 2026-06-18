@@ -196,8 +196,8 @@ export default function PredictionChart({ kline, prediction, loading }: Predicti
   return (
     <Card
       title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span>趋势预测</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span>趋势预测 <span style={{ fontSize: 11, color: '#999', fontWeight: 'normal' }}>（未来{prediction.forecast.length}日·中长期）</span></span>
           <Tag color="blue">{methodLabel}</Tag>
           <Tag color={prediction.trend === 'up' ? 'red' : prediction.trend === 'down' ? 'green' : 'default'}>
             {trendLabel}

@@ -338,6 +338,11 @@ Page({
       crScore=Math.max(-100,Math.min(100,crScore));
       crProb=Math.round(((crScore+100)/200)*100);
       if(crScore>=50){crR='强烈看涨';}else if(crScore>=20){crR='看涨';}else if(crScore<=-50){crR='强烈看跌';}else if(crScore<=-20){crR='看跌';}
+      // 与综合信号对齐
+      var isSigSell=sig.overall==='SELL'||sig.overall==='STRONG_SELL';
+      var isSigBuy=sig.overall==='BUY'||sig.overall==='STRONG_BUY';
+      if(isSigSell&&(crR==='强烈看涨'||crR==='看涨')){crR='中性（信号偏空）';crSummary='综合信号偏空，注意风险';crProb=Math.min(crProb,50);}
+      if(isSigBuy&&(crR==='强烈看跌'||crR==='看跌')){crR='中性（信号偏多）';crSummary='综合信号偏多，谨慎看涨';crProb=Math.max(crProb,50);}
       crSummary=crGood>=5?'多项指标共振向好，明日看涨概率较高':crBad>=5?'多项指标偏空，注意回调风险':crGood>crBad?'指标偏多，谨慎看涨':crBad>crGood?'指标偏空，注意风险':'指标中性，方向不明确';
       btDirClr:bt&&bt.metrics&&bt.metrics.directionCorrect?'#52c41a':'#ff4d4f',
       btDirTxt:bt&&bt.metrics&&bt.metrics.directionCorrect?'正确':'错误',
