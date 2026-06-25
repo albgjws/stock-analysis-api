@@ -6,7 +6,7 @@ import { searchStocks } from '../api/stockApi';
 import type { SearchResult } from '../types';
 
 const HISTORY_KEY = 'stock_search_history';
-const MAX_HISTORY = 10;
+const MAX_HISTORY = 20;
 
 interface HistoryItem {
   code: string;

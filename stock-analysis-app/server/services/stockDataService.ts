@@ -326,11 +326,46 @@ export class StockDataService {
   }
 
   /**
-   * Get today's intraday timeline data
+   * Get today's intraday timeline data (including pre-market 9:15-9:25)
    */
   async getTodayTimeline(code: string): Promise<any> {
     const normalized = this.normalizeCode(code);
-    return this.sdk.getTodayTimeline(normalized);
+    try {
+      const result = await this.sdk.getTodayTimeline(normalized);
+      if (result?.data?.length > 0) {
+        try {
+          const existingTimes = new Set(result.data.map((d: any) => d.time));
+          const hasPreMarket = Array.from(existingTimes).some((t: string) => t.startsWith('09:1'));
+          if (!hasPreMarket) {
+            // 直接调腾讯 5分K线 API 获取集合竞价数据
+            const today = new Date().toISOString().split('T')[0];
+            const url = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${normalized},5min,${today},${today},5,qfq`;
+            const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const json = await resp.json() as any;
+            const k5 = json?.data?.[normalized]?.['5min'] || [];
+            const preOpen: any[] = [];
+            for (const item of k5) {
+              if (!Array.isArray(item) || item.length < 6) continue;
+              const ds = String(item[0]);
+              const hhmm = ds.length >= 10 ? ds.slice(-4, -2) + ':' + ds.slice(-2) : '';
+              const closeP = parseFloat(item[2]) || 0;
+              const highP = parseFloat(item[3]) || 0;
+              const lowP = parseFloat(item[4]) || 0;
+              const vol = parseInt(item[5]) || 0;
+              if (['09:15','09:20','09:25'].includes(hhmm) && closeP > 0) {
+                preOpen.push({ time: hhmm, price: closeP, avgPrice: (highP + lowP) / 2 || closeP, volume: vol, amount: vol * closeP });
+              }
+            }
+            if (preOpen.length > 0) {
+              result.data = [...preOpen, ...result.data];
+            }
+          }
+        } catch {}
+      }
+      return result;
+    } catch {
+      return this.sdk.getTodayTimeline(normalized);
+    }
   }
 
   /**

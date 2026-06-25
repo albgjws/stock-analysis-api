@@ -10,86 +10,112 @@ interface IntradayChartProps {
   lastRefresh?: string;
 }
 
+/**
+ * 生成全天固定时间轴（同花顺风格）
+ * 上午 09:30-11:30（121个点）+ 下午 13:00-15:00（121个点）= 242个时间点
+ */
+function buildFullDayAxis(): string[] {
+  const t: string[] = [];
+  // 上午 09:30 → 11:30
+  for (let m = 30; m < 60; m++) t.push(`09:${String(m).padStart(2, '0')}`); // 30
+  for (let m = 0; m < 60; m++) t.push(`10:${String(m).padStart(2, '0')}`);   // 60
+  for (let m = 0; m <= 30; m++) t.push(`11:${String(m).padStart(2, '0')}`);  // 31（含11:30）
+  // 下午 13:00 → 15:00
+  for (let m = 0; m < 60; m++) t.push(`13:${String(m).padStart(2, '0')}`);   // 60
+  for (let m = 0; m < 60; m++) t.push(`14:${String(m).padStart(2, '0')}`);   // 60
+  t.push('15:00');                                                             // 1
+  return t; // 30+60+31+60+60+1 = 242
+}
+
+const AXIS_CACHE = buildFullDayAxis();
+
 export default function IntradayChart({ data, loading, signals, lastRefresh }: IntradayChartProps) {
   const option = useMemo(() => {
     if (!data || !data.data || data.data.length === 0) return {};
 
-    const points = data.data;
-    const times = points.map(p => p.time);
-    const prices = points.map(p => p.price);
-    const avgPrices = points.map(p => p.avgPrice);
-    const volumes = points.map(p => p.volume);
-    const preClose = data.preClose;
+    const pts = data.data;
+    const pc = data.preClose;
+    const AXIS = AXIS_CACHE;
 
-    // 判断当前整体涨跌
-    const lastPrice = prices[prices.length - 1];
-    const isUp = lastPrice >= preClose;
+    // 建立时间→数据映射
+    const dataByTime = new Map<string, typeof pts[0]>();
+    pts.forEach(p => dataByTime.set(p.time, p));
 
-    // 颜色
-    const lineColor = isUp ? '#cf1322' : '#3cb371';
-    const gradientTop = isUp ? 'rgba(207,19,34,0.3)' : 'rgba(60,179,113,0.3)';
-    const gradientBottom = isUp ? 'rgba(207,19,34,0.02)' : 'rgba(60,179,113,0.02)';
-    const volumeColor = isUp ? '#cf1322' : '#3cb371';
+    // 映射到固定时间轴
+    const prices: (number | null)[] = [];
+    const avgPrices: (number | null)[] = [];
+    const handVolumes: (number | null)[] = [];
+    let prevCumVol = 0;
 
-    // 获取信号标记 — 在分时走势中寻找技术触发点
-    const signalMarkers: any[] = [];
-    if (signals) {
+    for (const slot of AXIS) {
+      const dp = dataByTime.get(slot);
+      if (dp) {
+        prices.push(dp.price);
+        avgPrices.push(dp.avgPrice);
+        // 现手 = 当前累计量 - 上一分钟累计量
+        const dv = dp.volume - prevCumVol;
+        prevCumVol = dp.volume;
+        handVolumes.push(dv >= 0 ? dv : 0);
+      } else {
+        prices.push(null);
+        avgPrices.push(null);
+        handVolumes.push(null);
+      }
+    }
+
+    // 颜色：最新价 >= 昨收 → 红，否则绿
+    const realPrices = prices.filter(v => v !== null) as number[];
+    const lastP = realPrices.length > 0 ? realPrices[realPrices.length - 1] : pc;
+    const rising = lastP >= pc;
+    const colorMain = rising ? '#cf1322' : '#3cb371';
+    const gradTop = rising ? 'rgba(207,19,34,0.3)' : 'rgba(60,179,113,0.3)';
+    const gradBot = rising ? 'rgba(207,19,34,0.02)' : 'rgba(60,179,113,0.02)';
+
+    // ─── 买卖信号标记 ───
+    const marks: any[] = [];
+    if (signals && pts.length > 10) {
       const isBuy = signals.overall === 'STRONG_BUY' || signals.overall === 'BUY';
       const isSell = signals.overall === 'STRONG_SELL' || signals.overall === 'SELL';
-      const minLen = Math.min(times.length, prices.length, avgPrices.length, volumes.length);
-
-      // 扫描分时数据找最优买卖点
-      if (isBuy && minLen > 10) {
-        // 买点：价格大幅低于均价后放量反弹的位置
-        let bestIdx = -1, bestScore = -Infinity;
-        for (let i = 5; i < minLen - 3; i++) {
-          const dev = (avgPrices[i] - prices[i]) / avgPrices[i]; // 低于均价的幅度
-          const rebound = prices[i + 2] > prices[i] && prices[i + 1] > prices[i]; // 反弹确认
-          const volSpike = volumes[i] > volumes.slice(Math.max(0, i - 5), i).reduce((a, b) => a + b, 0) / 5 * 1.5;
-          if (dev > 0.005 && rebound) {
-            const score = dev * 1000 + (volSpike ? 5 : 0) + (i < minLen * 0.7 ? 3 : 0);
-            if (score > bestScore) { bestScore = score; bestIdx = i; }
+      if (isBuy || isSell) {
+        let bestIdx = pts.length - 1;
+        let bestScore = -Infinity;
+        for (let i = 5; i < pts.length - 3; i++) {
+          let score = 0;
+          if (isBuy) {
+            const dev = (pts[i].avgPrice - pts[i].price) / pts[i].avgPrice;
+            if (dev > 0.005 && pts[i + 1]?.price > pts[i].price && pts[i + 2]?.price > pts[i].price) {
+              score = dev * 1000 + (i < pts.length * 0.7 ? 3 : 0);
+            }
+          } else {
+            const dev = (pts[i].price - pts[i].avgPrice) / pts[i].avgPrice;
+            if (dev > 0.005 && (pts[i + 1]?.price < pts[i].price || pts[i + 2]?.price < pts[i].price)) {
+              score = dev * 1000 + (i > pts.length * 0.3 ? 3 : 0);
+            }
           }
+          if (score > bestScore) { bestScore = score; bestIdx = i; }
         }
-        if (bestIdx < 0) { // 兜底：找当日最低点
-          const dayLow = Math.min(...prices.filter(p => p > 0));
-          bestIdx = prices.indexOf(dayLow);
-        }
-        signalMarkers.push({
-          name: '买入信号', coord: [times[bestIdx], prices[bestIdx]],
-          symbol: 'arrow', symbolSize: [30, 30], symbolRotate: 0,
-          itemStyle: { color: '#cf1322' },
-          label: { formatter: '买入', color: '#fff', backgroundColor: '#cf1322',
-            padding: [4, 8], borderRadius: 4, fontSize: 14, fontWeight: 'bold', position: 'top' },
-        });
-      } else if (isSell && minLen > 10) {
-        // 卖点：价格大幅高于均价后放量滞涨的位置
-        let bestIdx = -1, bestScore = -Infinity;
-        for (let i = 5; i < minLen - 3; i++) {
-          const dev = (prices[i] - avgPrices[i]) / avgPrices[i]; // 高于均价的幅度
-          const fading = prices[i + 1] < prices[i] || prices[i + 2] < prices[i]; // 开始回落
-          const volSpike = volumes[i] > volumes.slice(Math.max(0, i - 5), i).reduce((a, b) => a + b, 0) / 5 * 1.5;
-          if (dev > 0.005 && fading) {
-            const score = dev * 1000 + (volSpike ? 5 : 0) + (i > minLen * 0.3 ? 3 : 0);
-            if (score > bestScore) { bestScore = score; bestIdx = i; }
-          }
-        }
-        if (bestIdx < 0) {
-          const dayHigh = Math.max(...prices.filter(p => p > 0));
-          bestIdx = prices.indexOf(dayHigh);
-        }
-        signalMarkers.push({
-          name: '卖出信号', coord: [times[bestIdx], prices[bestIdx]],
-          symbol: 'arrow', symbolSize: [30, 30], symbolRotate: 180,
-          itemStyle: { color: '#3cb371' },
-          label: { formatter: '卖出', color: '#fff', backgroundColor: '#3cb371',
-            padding: [4, 8], borderRadius: 4, fontSize: 14, fontWeight: 'bold', position: 'bottom' },
+        marks.push({
+          name: isBuy ? '买入' : '卖出',
+          coord: [pts[bestIdx].time, pts[bestIdx].price],
+          symbol: 'arrow',
+          symbolSize: [30, 30],
+          symbolRotate: isBuy ? 0 : 180,
+          itemStyle: { color: isBuy ? '#cf1322' : '#3cb371' },
+          label: {
+            formatter: isBuy ? '买入' : '卖出',
+            color: '#fff',
+            backgroundColor: isBuy ? '#cf1322' : '#3cb371',
+            padding: [4, 8],
+            borderRadius: 4,
+            fontSize: 14,
+            fontWeight: 'bold',
+            position: isBuy ? 'top' : 'bottom',
+          },
         });
       }
     }
 
-    // 最大成交量
-    const maxVolume = Math.max(...volumes, 1);
+    const maxHand = Math.max(...handVolumes.filter(v => v !== null) as number[], 1);
 
     return {
       animation: false,
@@ -97,48 +123,52 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
         trigger: 'axis',
         axisPointer: { type: 'cross' },
         formatter: (params: any[]) => {
-          const priceP = params.find((p: any) => p.seriesName === '价格');
-          const avgP = params.find((p: any) => p.seriesName === '均价');
-          if (!priceP) return '';
-          const idx = priceP.dataIndex;
-          const p = points[idx];
-          const changeVal = p.price - preClose;
-          const changePct = (changeVal / preClose) * 100;
-          const color = changeVal >= 0 ? '#cf1322' : '#3cb371';
-          let html = `<div style="font-size:12px;color:#999">${p.time}</div>`;
-          html += `<div>价格: <b>${p.price.toFixed(2)}</b></div>`;
-          html += `<div style="color:${color}">涨跌: ${changeVal >= 0 ? '+' : ''}${changeVal.toFixed(2)} (${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%)</div>`;
-          html += `<div>均价: <b>${p.avgPrice.toFixed(2)}</b></div>`;
-          html += `<div>成交量: <b>${p.volume.toLocaleString()}</b></div>`;
-          html += `<div>成交额: <b>${(p.amount / 10000).toFixed(0)}万</b></div>`;
-          return html;
+          const ps = params.find((p: any) => p.seriesName === '价格');
+          if (!ps || ps.value == null) return '';
+          const idx = ps.dataIndex;
+          const t = AXIS[idx];
+          const pr = prices[idx];
+          if (pr == null) return '';
+          const chg = pr - pc;
+          const orig = dataByTime.get(t);
+          const hv = handVolumes[idx] ?? 0;
+          return `<div style="font-size:12px;color:#999">${t}</div>
+<div>价格: <b>${pr.toFixed(2)}</b></div>
+<div style="color:${chg >= 0 ? '#cf1322' : '#3cb371'}">涨跌: ${chg >= 0 ? '+' : ''}${chg.toFixed(2)} (${(chg / pc * 100) >= 0 ? '+' : ''}${(chg / pc * 100).toFixed(2)}%)</div>
+<div>均价: <b>${avgPrices[idx]?.toFixed(2) ?? '-'}</b></div>
+<div>成交量: <b>${hv.toLocaleString()}</b></div>
+<div>总量: <b>${(orig?.volume ?? 0).toLocaleString()}</b></div>
+<div>现手: <b>${hv.toLocaleString()}</b></div>`;
         },
       },
       grid: [
-        { left: 60, right: 20, top: '8%', height: '55%' },
-        { left: 60, right: 20, top: '70%', height: '15%' },
+        { left: 65, right: 20, top: '6%', height: '53%' },
+        { left: 60, right: 20, top: '65%', height: '15%' },
       ],
       xAxis: [
         {
           type: 'category',
-          data: times,
+          data: AXIS,
           boundaryGap: false,
           axisLine: { onZero: false },
           axisLabel: {
             fontSize: 10,
-            formatter: (val: string) => {
-              // 只显示部分时间标签
-              const parts = val.split(':');
-              if (parts[1] === '00' || parts[1] === '30') return val;
-              return '';
+            // 只显示 9:30 / 11:30 / 15:00 三个标签
+            interval: (_idx: number, val: string) =>
+              val === '09:30' || val === '11:30' || val === '15:00',
+            formatter: (v: string) => {
+              if (v === '09:30') return '9:30';
+              if (v === '11:30') return '11:30';
+              return '15:00';
             },
           },
           splitLine: { show: false },
+          axisTick: { show: false },
         },
         {
           type: 'category',
           gridIndex: 1,
-          data: times,
+          data: AXIS,
           axisLabel: { show: false },
           splitLine: { show: false },
         },
@@ -149,22 +179,14 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           scale: true,
           splitArea: {
             show: true,
-            areaStyle: {
-              color: ['rgba(250,250,250,0.3)', 'rgba(200,200,200,0.1)'],
-            },
+            areaStyle: { color: ['rgba(250,250,250,0.3)', 'rgba(200,200,200,0.1)'] },
           },
           axisLabel: {
-            formatter: (val: number) => {
-              if (val >= 1000) return val.toFixed(0);
-              if (val >= 100) return val.toFixed(1);
-              return val.toFixed(2);
-            },
+            formatter: (v: number) =>
+              v >= 1000 ? v.toFixed(0) : v >= 100 ? v.toFixed(1) : v.toFixed(2),
             fontSize: 10,
           },
-          // 标记昨收
-          splitLine: {
-            show: true,
-          },
+          splitLine: { show: true, lineStyle: { type: 'dashed' } },
         },
         {
           type: 'value',
@@ -173,101 +195,84 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           axisLabel: {
             show: true,
             fontSize: 10,
-            formatter: (v: number) => {
-              if (v >= 100000000) return (v / 100000000).toFixed(1) + '亿';
-              if (v >= 10000) return (v / 10000).toFixed(0) + '万';
-              return v.toLocaleString();
-            },
+            formatter: (v: number) =>
+              v >= 1e8 ? (v / 1e8).toFixed(1) + '亿' :
+              v >= 1e4 ? (v / 1e4).toFixed(0) + '万' :
+              v.toLocaleString(),
           },
           splitLine: { show: false },
         },
       ],
       series: [
-        // 价格线
+        // ── 价格线 ──
         {
           name: '价格',
           type: 'line',
           data: prices,
           smooth: true,
           symbol: 'none',
-          lineStyle: { width: 2, color: lineColor },
+          connectNulls: false,
+          lineStyle: { width: 2, color: colorMain },
           areaStyle: {
             color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: gradientTop },
-                { offset: 1, color: gradientBottom },
+                { offset: 0, color: gradTop },
+                { offset: 1, color: gradBot },
               ],
             },
           },
           markLine: {
             silent: true,
             symbol: 'none',
-            data: [
-              {
-                yAxis: preClose,
-                label: {
-                  formatter: `昨收 ${preClose.toFixed(2)}`,
-                  color: '#999',
-                  fontSize: 11,
-                  position: 'insideEndTop',
-                },
-                lineStyle: { color: '#999', type: 'dashed', width: 1 },
+            data: [{
+              yAxis: pc,
+              label: {
+                formatter: `昨收 ${pc.toFixed(2)}`,
+                color: '#999',
+                fontSize: 10,
+                position: 'insideEndTop',
               },
-            ],
+              lineStyle: { color: '#999', type: 'dashed', width: 1 },
+            }],
           },
-          markPoint: {
-            data: signalMarkers,
-            symbol: 'pin',
-            symbolSize: 40,
-          },
+          markPoint: { data: marks },
         },
-        // 均价线
+        // ── 均价线 ──
         {
           name: '均价',
           type: 'line',
           data: avgPrices,
           smooth: true,
           symbol: 'none',
+          connectNulls: false,
           lineStyle: { width: 1, type: 'dashed', color: '#f90' },
         },
-        // 成交量
+        // ── 成交量 ──
         {
           name: '成交量',
           type: 'bar',
           xAxisIndex: 1,
           yAxisIndex: 1,
-          data: volumes.map((v, i) => ({
-            value: v,
-            itemStyle: {
-              color: (prices[i] >= preClose) ? '#cf1322' : '#3cb371',
-              opacity: 0.4,
-            },
-          })),
+          data: handVolumes.map((v, i) => {
+            if (v == null) return { value: 0, itemStyle: { color: 'transparent' } };
+            return {
+              value: v,
+              itemStyle: {
+                color: prices[i] != null && prices[i]! >= pc ? '#cf1322' : '#3cb371',
+                opacity: 0.5,
+              },
+            };
+          }),
+          barWidth: '40%',
         },
       ],
     };
   }, [data, signals]);
 
   if (!data || !data.data || data.data.length === 0) {
-    if (loading) {
-      return <Card title="今日分时" style={{ borderRadius: 8, width: '100%' }}><div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载分时数据...</div></Card>;
-    }
-    return (
-      <Card
-        title={
-          <span>
-            <span style={{ color: '#1677ff' }}>⚡</span> 今日分时
-          </span>
-        }
-        style={{ borderRadius: 8, width: '100%' }}
-      >
-        <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
-          非交易时间或暂无分时数据
-        </div>
-      </Card>
-    );
+    if (loading) return <Card title="今日分时" style={{ borderRadius: 8, width: '100%' }}><div style={{ textAlign: 'center', padding: 40, color: '#999' }}>加载分时数据...</div></Card>;
+    return <Card title={<span><span style={{ color: '#1677ff' }}>⚡</span> 今日分时</span>} style={{ borderRadius: 8, width: '100%' }}><div style={{ textAlign: 'center', padding: 40, color: '#999' }}>非交易时间或暂无分时数据</div></Card>;
   }
 
   return (
@@ -275,51 +280,16 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
       title={
         <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span>⚡ 今日分时</span>
-          <span style={{ fontSize: 12, color: '#999', fontWeight: 'normal' }}>
-            {data.date}
+          <span style={{ fontSize: 12, color: '#999' }}>{data.date}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#52c41a', fontWeight: 600 }}>
+            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#52c41a', animation: 'pulse 1.5s ease-in-out infinite' }} />实时
           </span>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            fontSize: 11, color: '#52c41a', fontWeight: 600,
-          }}>
-            <span style={{
-              display: 'inline-block', width: 6, height: 6,
-              borderRadius: '50%', background: '#52c41a',
-              animation: 'pulse 1.5s ease-in-out infinite',
-            }} />
-            实时
-          </span>
-          {lastRefresh && (
-            <span style={{ fontSize: 11, color: '#999' }}>
-              {lastRefresh}
-            </span>
-          )}
+          {lastRefresh && <span style={{ fontSize: 11, color: '#999' }}>{lastRefresh}</span>}
           {signals && (
-            <span style={{ marginLeft: 4 }}>
-              {(signals.overall === 'STRONG_BUY' || signals.overall === 'BUY') && (
-                <span style={{
-                  background: '#cf1322', color: '#fff', padding: '2px 10px',
-                  borderRadius: 4, fontSize: 13, fontWeight: 'bold'
-                }}>
-                  📈 买入信号
-                </span>
-              )}
-              {(signals.overall === 'STRONG_SELL' || signals.overall === 'SELL') && (
-                <span style={{
-                  background: '#3cb371', color: '#fff', padding: '2px 10px',
-                  borderRadius: 4, fontSize: 13, fontWeight: 'bold'
-                }}>
-                  📉 卖出信号
-                </span>
-              )}
-              {signals.overall === 'HOLD' && (
-                <span style={{
-                  background: '#faad14', color: '#fff', padding: '2px 10px',
-                  borderRadius: 4, fontSize: 13, fontWeight: 'bold'
-                }}>
-                  ⚪ 观望
-                </span>
-              )}
+            <span>
+              {(signals.overall === 'STRONG_BUY' || signals.overall === 'BUY') && <span style={{ background: '#cf1322', color: '#fff', padding: '2px 10px', borderRadius: 4, fontSize: 13, fontWeight: 'bold' }}>📈 买入信号</span>}
+              {(signals.overall === 'STRONG_SELL' || signals.overall === 'SELL') && <span style={{ background: '#3cb371', color: '#fff', padding: '2px 10px', borderRadius: 4, fontSize: 13, fontWeight: 'bold' }}>📉 卖出信号</span>}
+              {signals.overall === 'HOLD' && <span style={{ background: '#faad14', color: '#fff', padding: '2px 10px', borderRadius: 4, fontSize: 13, fontWeight: 'bold' }}>⚪ 观望</span>}
             </span>
           )}
         </span>

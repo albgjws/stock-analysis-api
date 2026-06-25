@@ -240,7 +240,7 @@ Page({
 
     // 分时
     var idD=id&&id.data||[],idP=idD.map(function(p){return p.price}),idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id&&id.preClose||0;
-    var tb=idD.map(function(p){return{h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371'}});
+    var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
 
     // 复盘
     var lb=hk?kl[kl.length-1]:{},avg=hk?kl.slice(-20).reduce(function(s,b){return s+b.volume},0)/20:0,tv=lb.volume||0;
@@ -419,7 +419,7 @@ Page({
         if(!id||!id.data||!id.data.length)return;
         var idD=id.data,idP=idD.map(function(p){return p.price});
         var idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id.preClose||0;
-        var tb=idD.map(function(p){return{h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371'}});
+        var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
         me.setData({
           tlBars:tb,
           idOpenText:'¥'+$(idD[0]&&idD[0].price),

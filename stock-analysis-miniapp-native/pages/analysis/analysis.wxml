@@ -254,8 +254,13 @@
     <!-- ===== ⑦ 今日分时 ===== -->
     <view wx:if="{{tlBars.length>0}}" class="card">
       <text class="ct">⚡ 今日分时</text>
-      <view class="ch" style="height:120px;">
+      <view class="ch" style="height:120px;position:relative;">
         <view wx:for="{{tlBars}}" wx:key="idx" class="tl-bar" style="height:{{item.h}}%;background:{{item.c}};"></view>
+      </view>
+      <view style="display:flex;margin-top:4rpx;gap:0;">
+        <view wx:for="{{tlBars}}" wx:key="idx" style="flex:1;text-align:center;">
+          <text wx:if="{{item.lb}}" style="font-size:8px;color:#999;">{{item.time}}</text>
+        </view>
       </view>
       <view class="rw" style="font-size:12px;color:#999;margin-top:6px;">
         <text>开 {{idOpenText}}</text>

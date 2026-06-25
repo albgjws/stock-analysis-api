@@ -28,7 +28,7 @@ Page({
     const { code, name, market } = e.currentTarget.dataset;
     let history = this.data.history.filter(h => h.code !== code);
     history.unshift({ code, name, market });
-    if (history.length > 10) history = history.slice(0, 10);
+    if (history.length > 20) history = history.slice(0, 20);
     this.setData({ history });
     wx.setStorageSync(HISTORY_KEY, JSON.stringify(history));
     wx.navigateTo({ url: `/pages/analysis/analysis?code=${code}&name=${encodeURIComponent(name)}` });
