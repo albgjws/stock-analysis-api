@@ -90,9 +90,30 @@ export class SignalService {
   }
 
   /**
-   * 计算止损价
-   * 策略：取最近20日最低价、MA60支撑、当前价*0.93 三者的最大值作为止损底线
-   * 如果信号偏多则宽松些，偏空则收紧
+   * 计算ATR（平均真实波幅）
+   * 反映股票近期的真实波动范围，用于动态调整止损止盈
+   */
+  private calcATR(klineData: KlineBar[], period: number = 14): number {
+    const trs: number[] = [];
+    for (let i = Math.max(1, klineData.length - period - 1); i < klineData.length; i++) {
+      const cur = klineData[i];
+      const prev = klineData[i - 1];
+      if (!cur || !prev) continue;
+      const hl = cur.high - cur.low;
+      const hc = Math.abs(cur.high - prev.close);
+      const lc = Math.abs(cur.low - prev.close);
+      trs.push(Math.max(hl, hc, lc));
+    }
+    if (trs.length === 0) return klineData[klineData.length - 1].close * 0.02;
+    return trs.reduce((a, b) => a + b, 0) / trs.length;
+  }
+
+  /**
+   * 计算止损价（基于ATR的自适应策略）
+   * - 买入信号：止损放在近期低点下方或1.5×ATR下方，取较高值（宽松一些）
+   * - 卖出信号：止损放在近期低点下方或1×ATR下方，取较高值（收紧一些）
+   * - 震荡行情：用ATR的1.2倍
+   * 始终保底1×ATR，最多3×ATR
    */
   private calcStopLoss(
     klineData: KlineBar[],
@@ -100,49 +121,42 @@ export class SignalService {
     support: number,
     score: number,
   ): StopLevel {
+    const atr = this.calcATR(klineData);
     const recent = klineData.slice(-20);
     const swingLow = Math.min(...recent.map(b => b.low));
 
-    // MA20/MA60 support
-    const last = klineData[klineData.length - 1];
-    const maSupport = Math.min(
-      last.ma?.ma20 ?? price,
-      last.ma?.ma60 ?? price,
-    );
-
-    // 固定百分比止损底线（根据信号强度调整）
-    // 买入信号强 → 宽松止损（给更多波动空间）
-    // 卖出信号强 → 收紧止损（尽快离场）
+    // 根据信号强度调整止损倍数
     const isBullish = score >= 0;
-    const baseStopPercent = isBullish ? 0.93 : 0.97;  // 偏多允许跌7%，偏空只允许跌3%
-    const fixedStop = price * baseStopPercent;
+    // 买入信号：放宽止损（1.8×ATR），卖出信号：收紧止损（1.2×ATR）
+    const atrMultiplier = isBullish ? 1.8 : 1.2;
+    const atrStop = price - atr * atrMultiplier;
 
-    // 取三者中最高的（最保守的止损位）
-    let stopPrice = Math.max(swingLow * 0.995, maSupport * 0.99, fixedStop);
+    // 取两者较高值（更保守的止损）
+    // swingLow * 0.997 稍微放一点点空间避免刚好打中
+    let stopPrice = Math.max(swingLow * 0.997, atrStop);
 
-    // 止损不能太接近现价（避免被噪音触发），也不能太远
-    const minDistance = price * 0.02;   // 至少离现价2%
-    const maxDistance = price * 0.10;   // 最多离现价10%
-    const actualDistance = price - stopPrice;
+    // 限制最小1×ATR，最大3×ATR
+    const minDist = atr * 1.0;
+    const maxDist = atr * 3.0;
+    const actualDist = price - stopPrice;
 
-    if (actualDistance < minDistance) {
-      stopPrice = price - minDistance;
-    } else if (actualDistance > maxDistance) {
-      stopPrice = price - maxDistance;
+    if (actualDist < minDist) {
+      stopPrice = price - minDist;
+    } else if (actualDist > maxDist) {
+      stopPrice = price - maxDist;
     }
 
     const percent = ((stopPrice - price) / price * 100);
 
-    // 确定理由 — 三选一：最低价支撑 / 均线支撑 / 固定比例
-    const candidates: { price: number; label: string }[] = [
-      { price: Math.round(swingLow * 0.995 * 100) / 100, label: `跌破近期低点 ${swingLow.toFixed(2)}` },
-      { price: Math.round(maSupport * 0.99 * 100) / 100, label: `跌破均线支撑 ${maSupport.toFixed(2)}` },
-      { price: Math.round(fixedStop * 100) / 100, label: `固定止损 ${(baseStopPercent * 100 - 100).toFixed(0)}%` },
-    ];
-    const closest = candidates.reduce((a, b) =>
-      Math.abs(a.price - stopPrice) < Math.abs(b.price - stopPrice) ? a : b
-    );
-    const reason = closest.label;
+    // 确定理由
+    let reason: string;
+    const diffFromSwing = Math.abs(stopPrice - swingLow * 0.997);
+    const diffFromAtr = Math.abs(stopPrice - atrStop);
+    if (diffFromSwing < diffFromAtr) {
+      reason = `跌破近期低点 ${swingLow.toFixed(2)}（ATR=${atr.toFixed(3)}）`;
+    } else {
+      reason = `ATR止损 ${(atrMultiplier).toFixed(1)}倍（波动率=${(atr / price * 100).toFixed(1)}%）`;
+    }
 
     return {
       price: Math.round(stopPrice * 100) / 100,
@@ -152,9 +166,9 @@ export class SignalService {
   }
 
   /**
-   * 计算止盈价
-   * 策略：取近期高点、布林上轨、固定盈亏比三者综合
-   * 风险回报比至少 1:2（亏1赚2）
+   * 计算止盈价（基于ATR的自适应策略）
+   * - 买入信号：止盈放在近期高点上方或2.5×ATR上方，取较低值
+   * - 风险回报比至少1:2
    */
   private calcTakeProfit(
     klineData: KlineBar[],
@@ -163,42 +177,43 @@ export class SignalService {
     stopLoss: StopLevel,
     score: number,
   ): StopLevel {
+    const atr = this.calcATR(klineData);
     const recent = klineData.slice(-20);
     const swingHigh = Math.max(...recent.map(b => b.high));
 
-    // 布林带上轨阻力
-    const last = klineData[klineData.length - 1];
-    const bollUpper = last.boll?.upper ?? resistance;
+    // 根据信号强度调整止盈倍数
+    const atrMultiplier = score >= 0 ? 2.5 : 2.0;
+    const atrTarget = price + atr * atrMultiplier;
 
-    // 基于风险回报比的目标价（至少1:2）
+    // 盈亏比目标（至少1:2）
     const riskAmount = price - stopLoss.price;
-    const rewardRatio = score >= 0 ? 2.5 : 1.5;  // 偏多时要求更高回报
-    const rrTarget = price + riskAmount * rewardRatio;
+    const rrTarget = price + riskAmount * 2.0;
 
-    // 取三者中最低的（最保守的止盈位）
-    let tpPrice = Math.min(swingHigh * 1.01, bollUpper * 0.99, rrTarget);
+    // 取三者最低值（最保守的止盈）
+    let tpPrice = Math.min(swingHigh * 1.005, atrTarget, rrTarget);
 
-    // 止盈不能太接近现价
-    const minTarget = price * 1.03; // 至少涨3%
+    // 最小涨幅：1.2×ATR
+    const minTarget = price + atr * 1.2;
     if (tpPrice < minTarget) {
       tpPrice = minTarget;
+    }
+    // 最大涨幅：不超5×ATR
+    const maxTarget = price + atr * 5.0;
+    if (tpPrice > maxTarget) {
+      tpPrice = maxTarget;
     }
 
     const percent = ((tpPrice - price) / price * 100);
 
     // 确定理由
+    const diffSwing = Math.abs(tpPrice - swingHigh * 1.005);
+    const diffAtr = Math.abs(tpPrice - atrTarget);
+    const diffRr = Math.abs(tpPrice - rrTarget);
     let reason: string;
-    const candidates: { price: number; label: string }[] = [
-      { price: Math.round(swingHigh * 1.01 * 100) / 100, label: `近期高点 ${swingHigh.toFixed(2)}` },
-      { price: Math.round(bollUpper * 0.99 * 100) / 100, label: `布林上轨 ${bollUpper.toFixed(2)}` },
-      { price: Math.round(rrTarget * 100) / 100, label: `盈亏比 ${rewardRatio.toFixed(1)}:1` },
-    ];
-
-    // 找到最接近实际止盈价的理由
-    const closest = candidates.reduce((prev, curr) =>
-      Math.abs(curr.price - tpPrice) < Math.abs(prev.price - tpPrice) ? curr : prev
-    );
-    reason = closest.label;
+    const minDiff = Math.min(diffSwing, diffAtr, diffRr);
+    if (minDiff === diffSwing) reason = `近期高点 ${swingHigh.toFixed(2)}`;
+    else if (minDiff === diffAtr) reason = `ATR目标 ${(atrMultiplier).toFixed(1)}倍（波动率=${(atr / price * 100).toFixed(1)}%）`;
+    else reason = `盈亏比 2:1`;
 
     return {
       price: Math.round(tpPrice * 100) / 100,

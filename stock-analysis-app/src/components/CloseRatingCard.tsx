@@ -10,10 +10,10 @@ interface CloseRatingCardProps {
 
 const ratingColors: Record<string, string> = {
   strong_bull: '#cf1322',
-  bull: '#f5222d',
+  bull: '#cf1322',
   neutral: '#faad14',
   bear: '#3cb371',
-  strong_bear: '#389e0d',
+  strong_bear: '#3cb371',
 };
 
 const ratingBg: Record<string, string> = {

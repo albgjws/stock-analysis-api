@@ -19,6 +19,8 @@ import MarketRecap from '../components/MarketRecap';
 import AdvancedSignalLegend from '../components/AdvancedSignalLegend';
 import PositionAdvice from '../components/PositionAdvice';
 import BacktestReport from '../components/BacktestReport';
+import PredictionComparisonChart from '../components/PredictionComparisonChart';
+import SignalBacktestCard from '../components/SignalBacktestCard';
 import { generateMarketRecap } from '../utils/marketRecap';
 import { calcAllAdvancedSignals, calcLimitPrediction, calcCloseRating } from '../utils/advancedIndicators';
 import type { MarketRecapResult } from '../utils/marketRecap';
@@ -465,11 +467,17 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       {/* 预测回测 */}
       {hasKline && <BacktestReport code={info.code} visible={hasKline} />}
 
+      {/* 预测对比图 */}
+      {hasKline && <PredictionComparisonChart code={info.code} visible={hasKline} />}
+
       {/* 买入诊断 */}
       <PurchaseAnalysis key={info.code} stockCode={info.code} stockName={info.name} />
 
       {/* 买卖信号 — 仅当有K线时 */}
       {hasKline && <SignalPanel signals={signals} />}
+
+      {/* 买卖信号回测 */}
+      {hasKline && <SignalBacktestCard code={info.code} visible={hasKline} />}
     </div>
   );
 }

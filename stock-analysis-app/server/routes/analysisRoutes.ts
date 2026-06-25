@@ -1,4 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { StockDataService, StockNotFoundError } from '../services/stockDataService';
 import { PredictionService } from '../services/predictionService';
 import { SignalService } from '../services/signalService';
@@ -6,6 +8,7 @@ import { PurchaseAnalysisService } from '../services/purchaseAnalysisService';
 import { CacheService } from '../services/cacheService';
 import { PredictionHistoryService } from '../services/predictionHistoryService';
 import { PredictionCorrectionService } from '../services/predictionCorrectionService';
+import { SignalBacktestService } from '../services/signalBacktestService';
 import { config } from '../config';
 import type { PredictionResult, SignalResult } from '../types';
 
@@ -17,6 +20,7 @@ const purchaseAnalysisService = new PurchaseAnalysisService();
 const cache = new CacheService();
 const predHistoryService = new PredictionHistoryService();
 const correctionService = new PredictionCorrectionService();
+const signalBacktestService = new SignalBacktestService();
 
 // GET /api/stock/:code/intraday — 当日分时图数据
 router.get('/:code/intraday', async (req: Request, res: Response, next: NextFunction) => {
@@ -258,6 +262,42 @@ router.get('/:code/backtest', async (req: Request, res: Response, next: NextFunc
   }
 });
 
+// GET /api/stock/:code/signal-backtest — 买卖信号历史回测
+router.get('/:code/signal-backtest', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const count = Math.min(
+      Math.max(Number(req.query.count) || config.defaultKlineCount, 30),
+      config.maxKlineCount
+    );
+    const kline = await stockDataService.getKlineWithIndicators(code, {
+      count,
+      fq: 'qfq',
+      indicators: {
+        ma: { periods: [5, 10, 20, 60] },
+        macd: { fast: 12, slow: 26, signal: 9 },
+        boll: { period: 20, stdDev: 2 },
+        rsi: { period: 14 },
+        kdj: { period: 9, kPeriod: 3, dPeriod: 3 },
+      },
+    });
+    const result = signalBacktestService.backtestSignals(kline);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stock/aggregate-stats — 预测汇总统计
+router.get('/aggregate-stats', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = predHistoryService.getAggregateStats();
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/market/indices — 大盘指数行情
 router.get('/indices', async (_req: Request, res: Response, next: NextFunction) => {
   try {
@@ -296,6 +336,21 @@ router.get('/indices', async (_req: Request, res: Response, next: NextFunction) 
     res.json(result);
   } catch (err) {
     next(err);
+  }
+});
+
+// GET /api/stock/daily-report — 每日自动回测报表
+router.get('/daily-report', async (_req: Request, res: Response) => {
+  try {
+    const reportPath = path.resolve(config.cacheDir, 'daily_report.json');
+    if (fs.existsSync(reportPath)) {
+      const data = JSON.parse(fs.readFileSync(reportPath, 'utf-8'));
+      res.json(data);
+    } else {
+      res.json(null);
+    }
+  } catch {
+    res.json(null);
   }
 });
 

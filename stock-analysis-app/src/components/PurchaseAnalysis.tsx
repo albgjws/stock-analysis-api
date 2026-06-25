@@ -63,10 +63,10 @@ export default function PurchaseAnalysis({ stockCode, stockName }: PurchaseAnaly
   const ratingColor = (rating: string) => {
     switch (rating) {
       case 'excellent': return '#cf1322';  // 优秀=红（涨）
-      case 'good': return '#f5222d';       // 良好=红（涨）
+      case 'good': return '#cf1322';       // 良好=红（涨）
       case 'neutral': return '#faad14';    // 中性=黄
       case 'risky': return '#3cb371';      // 风险=绿（跌）
-      case 'bad': return '#389e0d';        // 差=绿（跌）
+      case 'bad': return '#3cb371';        // 差=绿（跌）
       default: return '#999';
     }
   };

@@ -1,5 +1,7 @@
 import React from 'react';
-import { Typography, Card } from 'antd';
+import { Typography, Card, Button } from 'antd';
+import { BarChartOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
 
 const { Title, Paragraph } = Typography;
@@ -9,6 +11,8 @@ interface HomePageProps {
 }
 
 export default function HomePage({ onAddTab }: HomePageProps) {
+  const navigate = useNavigate();
+
   return (
     <div
       style={{
@@ -75,6 +79,11 @@ export default function HomePage({ onAddTab }: HomePageProps) {
         </div>
         <div style={{ marginTop: 24, color: '#999', fontSize: 13 }}>
           💡 搜索股票后将自动添加到标签页，可同时查看多只个股
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Button type="link" icon={<BarChartOutlined />} onClick={() => navigate('/stats')}>
+            查看预测模型汇总统计
+          </Button>
         </div>
       </Card>
     </div>

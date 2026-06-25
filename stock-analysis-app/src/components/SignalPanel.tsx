@@ -140,7 +140,7 @@ export default function SignalPanel({ signals }: SignalPanelProps) {
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <SafetyCertificateOutlined style={{ color: '#3cb371', fontSize: 18 }} />
-              <span style={{ fontWeight: 600, color: '#389e0d', fontSize: 15 }}>止损价</span>
+              <span style={{ fontWeight: 600, color: '#3cb371', fontSize: 15 }}>止损价</span>
             </div>
             <div style={{ fontSize: 26, fontWeight: 'bold', color: '#3cb371' }}>
               {formatPrice(signals.stopLoss.price)}

@@ -34,7 +34,7 @@ export default function PositionAdvice({ signals, score }: PositionAdviceProps) 
     tip = '技术面全面偏多，是较好的建仓时机';
   } else if (signals.overall === 'BUY') {
     label = '建议建仓';
-    color = '#f5222d';
+    color = '#cf1322';
     icon = <RiseOutlined />;
     tip = '多项指标发出买入信号，可分批建仓';
   } else if (signals.overall === 'HOLD') {
@@ -44,7 +44,7 @@ export default function PositionAdvice({ signals, score }: PositionAdviceProps) 
     tip = '多空信号均衡，建议观望或轻仓持有';
   } else if (signals.overall === 'SELL') {
     label = '减仓观望';
-    color = '#52c41a';
+    color = '#3cb371';
     icon = <FallOutlined />;
     tip = '技术面转弱，建议减仓控制风险';
   } else {

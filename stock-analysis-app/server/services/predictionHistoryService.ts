@@ -28,8 +28,38 @@ export interface BacktestResult {
     within80: number;   // 80%置信区间内比例
     within95: number;   // 95%置信区间内比例
   };
+  /** 预测vs实际对比序列（用于图表） */
+  comparisonSeries?: {
+    dates: string[];
+    forecast: (number | null)[];
+    actual: (number | null)[];
+    upper80: (number | null)[];
+    lower80: (number | null)[];
+  };
   deviationAnalysis?: string[];
   improvementTips?: string[];
+}
+
+export interface AggregateStats {
+  totalStocks: number;
+  totalPredictions: number;
+  avgMae: number;
+  directionCorrectRate: number;
+  within80Rate: number;
+  within95Rate: number;
+  byMethod: Record<string, {
+    count: number;
+    directionCorrect: number;
+    avgMae: number;
+  }>;
+  recentPredictions: {
+    code: string;
+    date: string;
+    method: string;
+    trend: string;
+    directionCorrect: boolean | null;
+    mae: number | null;
+  }[];
 }
 
 export class PredictionHistoryService {
@@ -133,6 +163,34 @@ export class PredictionHistoryService {
       if (match.close >= fp.lower95 && match.close <= fp.upper95) within95Count++;
     }
 
+    // 构建对比序列（对齐日期）
+    const comparisonDates: string[] = [];
+    const comparisonForecast: (number | null)[] = [];
+    const comparisonActual: (number | null)[] = [];
+    const comparisonU80: (number | null)[] = [];
+    const comparisonL80: (number | null)[] = [];
+    // 加入预测起点（last实际价）
+    comparisonDates.push(record.date);
+    comparisonForecast.push(record.lastPrice);
+    comparisonActual.push(record.lastPrice);
+    comparisonU80.push(record.lastPrice);
+    comparisonL80.push(record.lastPrice);
+    for (const fp of record.forecast) {
+      comparisonDates.push(fp.date);
+      comparisonForecast.push(fp.value);
+      comparisonU80.push(fp.upper80);
+      comparisonL80.push(fp.lower80);
+      const match = actualBars.find(b => b.date === fp.date);
+      comparisonActual.push(match ? match.close : null);
+    }
+    const comparisonSeries = {
+      dates: comparisonDates,
+      forecast: comparisonForecast,
+      actual: comparisonActual,
+      upper80: comparisonU80,
+      lower80: comparisonL80,
+    };
+
     if (errors.length === 0) {
       return { hasHistory: true, record, actualBars };
     }
@@ -212,8 +270,86 @@ export class PredictionHistoryService {
       record,
       actualBars,
       metrics,
+      comparisonSeries,
       deviationAnalysis,
       improvementTips,
+    };
+  }
+
+  /** 汇总所有股票的预测回测统计 */
+  getAggregateStats(klineMap?: Record<string, KlineBar[]>): AggregateStats {
+    const dir = this.dir;
+    if (!fs.existsSync(dir)) {
+      return { totalStocks: 0, totalPredictions: 0, avgMae: 0, directionCorrectRate: 0, within80Rate: 0, within95Rate: 0, byMethod: {}, recentPredictions: [] };
+    }
+
+    let totalPredictions = 0;
+    let totalMae = 0;
+    let totalDirectionCorrect = 0;
+    let totalDirectionChecked = 0;
+    let totalWithin80 = 0;
+    let totalWithin95 = 0;
+    let totalErrorCount = 0;
+    const byMethod: Record<string, { count: number; directionCorrect: number; avgMae: number }> = {};
+    const recentPredictions: AggregateStats['recentPredictions'] = [];
+
+    try {
+      const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+      for (const file of files) {
+        const code = file.replace('.json', '');
+        try {
+          const history: PredictionRecord[] = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf-8'));
+          for (const record of history) {
+            totalPredictions++;
+            if (record.method) {
+              if (!byMethod[record.method]) byMethod[record.method] = { count: 0, directionCorrect: 0, avgMae: 0 };
+              byMethod[record.method].count++;
+            }
+            if (klineMap && klineMap[code]) {
+              const bt = this.backtest(code, klineMap[code]);
+              if (bt.metrics) {
+                totalMae += bt.metrics.mae;
+                totalErrorCount++;
+                totalDirectionCorrect += bt.metrics.directionCorrect ? 1 : 0;
+                totalDirectionChecked++;
+                totalWithin80 += bt.metrics.within80;
+                totalWithin95 += bt.metrics.within95;
+                if (byMethod[record.method]) {
+                  byMethod[record.method].directionCorrect += bt.metrics.directionCorrect ? 1 : 0;
+                }
+                recentPredictions.push({
+                  code,
+                  date: record.date,
+                  method: record.method || 'unknown',
+                  trend: record.trend || 'sideways',
+                  directionCorrect: bt.metrics.directionCorrect,
+                  mae: bt.metrics.mae,
+                });
+              }
+            } else {
+              recentPredictions.push({
+                code,
+                date: record.date,
+                method: record.method || 'unknown',
+                trend: record.trend || 'sideways',
+                directionCorrect: null,
+                mae: null,
+              });
+            }
+          }
+        } catch {}
+      }
+    } catch {}
+
+    return {
+      totalStocks: fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.json')).length : 0,
+      totalPredictions,
+      avgMae: totalErrorCount > 0 ? Math.round((totalMae / totalErrorCount) * 100) / 100 : 0,
+      directionCorrectRate: totalDirectionChecked > 0 ? Math.round((totalDirectionCorrect / totalDirectionChecked) * 10000) / 100 : 0,
+      within80Rate: totalErrorCount > 0 ? Math.round((totalWithin80 / totalErrorCount) * 100) / 100 : 0,
+      within95Rate: totalErrorCount > 0 ? Math.round((totalWithin95 / totalErrorCount) * 100) / 100 : 0,
+      byMethod,
+      recentPredictions: recentPredictions.slice(-50).reverse(),
     };
   }
 }

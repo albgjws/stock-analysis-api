@@ -83,4 +83,25 @@ export async function getCorrectionReport(): Promise<any[]> {
   return res.json();
 }
 
+export async function getSignalBacktest(code: string): Promise<any> {
+  const url = `${BASE_URL}/${encodeURIComponent(code)}/signal-backtest`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getAggregateStats(): Promise<any> {
+  const url = `${BASE_URL}/aggregate-stats`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getDailyReport(): Promise<any> {
+  const url = `${BASE_URL}/daily-report`;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export { ApiError, NotFoundError };

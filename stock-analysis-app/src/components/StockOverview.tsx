@@ -61,7 +61,7 @@ export default function StockOverview({ info }: StockOverviewProps) {
             <Col span={6}><Statistic title="成交量" value={formatVolume(info.volume)} valueStyle={{ fontSize: 16 }} /></Col>
             <Col span={6}><Statistic title="成交额" value={formatAmount(info.amount)} valueStyle={{ fontSize: 16, color: '#1677ff' }} /></Col>
             <Col span={6}><Statistic title="市值" value={formatAmount(info.marketCap)} valueStyle={{ fontSize: 16 }} /></Col>
-            <Col span={6}><Statistic title="换手率" value={info.turnoverRate ? info.turnoverRate.toFixed(2) + '%' : '—'} valueStyle={{ fontSize: 16, color: '#999' }} /></Col>
+            <Col span={6}><Statistic title="换手率" value={info.turnoverRate != null ? info.turnoverRate.toFixed(2) + '%' : '—'} valueStyle={{ fontSize: 16, color: '#999' }} /></Col>
           </Row>
         </Col>
       </Row>

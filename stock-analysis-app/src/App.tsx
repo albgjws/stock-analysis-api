@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
 import { Tabs } from 'antd';
+import { Routes, Route } from 'react-router-dom';
 import AppLayout from './components/Layout';
 import HomePage from './pages/HomePage';
 import AnalysisPage from './pages/AnalysisPage';
+import AggregateDashboard from './components/AggregateDashboard';
 import { TabProvider, useTabContext } from './context/TabContext';
 
 function AppContent() {
@@ -98,7 +100,10 @@ function AppContent() {
 export default function App() {
   return (
     <TabProvider>
-      <AppContent />
+      <Routes>
+        <Route path="/stats" element={<AppLayout><AggregateDashboard /></AppLayout>} />
+        <Route path="*" element={<AppContent />} />
+      </Routes>
     </TabProvider>
   );
 }

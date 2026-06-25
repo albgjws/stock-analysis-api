@@ -41,9 +41,9 @@
 /* ===== 建仓建议 ===== */
 .sig-badge{display:inline-block;padding:4px 14px;border-radius:6px;font-size:13px;font-weight:700}
 .sig-SBUY{background:#fff2f0;color:#cf1322;border:1px solid #ffccc7}
-.sig-BUY{background:#fff2f0;color:#f5222d;border:1px solid #ffccc7}
+.sig-BUY{background:#fff2f0;color:#cf1322;border:1px solid #ffccc7}
 .sig-HOLD{background:#fffbe6;color:#d48806;border:1px solid #ffe58f}
-.sig-SELL{background:#f6ffed;color:#389e0d;border:1px solid #b7eb8f}
+.sig-SELL{background:#f6ffed;color:#3cb371;border:1px solid #b7eb8f}
 .sig-SSELL{background:#f6ffed;color:#3cb371;border:1px solid #b7eb8f}
 .sr-box{flex:1;text-align:center;padding:8px;background:#fafafa;border-radius:8px}
 .sr-lbl{font-size:11px;color:#999;display:block;margin-bottom:4px}
