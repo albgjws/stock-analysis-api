@@ -104,4 +104,11 @@ export async function getDailyReport(): Promise<any> {
   return res.json();
 }
 
+export async function getTransactions(code: string, count: number = 30): Promise<any[]> {
+  const url = `${BASE_URL}/${encodeURIComponent(code)}/transactions?count=${count}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  return res.json();
+}
+
 export { ApiError, NotFoundError };

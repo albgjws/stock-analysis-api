@@ -573,21 +573,35 @@ export interface LimitPrediction {
   nextDayTrend: 'up' | 'down' | 'sideways';
   analysis: string;             // 分析文字
   factors: string[];            // 影响因素
+  // 同花顺风格明细
+  limitPrice: number | null;     // 涨停价/跌停价
+  blockVolume: number;           // 封单量（手）
+  blockAmount: number;           // 封单额（元）
+  blockRatio: number | null;     // 封单占成交比(%)
+  limitVolume: number;           // 涨停/跌停成交额（元）
+  maxBlockAmount: number;        // 最高封单额（元）
+  turnoverRate: number | null;   // 换手率(%)
+  totalAmount: number;           // 今日总成交额（元）
 }
 
 /**
- * 涨停/跌停连板概率预测
+ * 涨停/跌停连板概率预测 + 封单详情
  *
- * 涨停检测：涨幅≥9.6%（非ST） 或 涨幅≥4.8%（ST）
- * 跌停检测：跌幅≤-9.6%（非ST） 或 跌幅≤-4.8%（ST）
+ * 涨跌停检测：涨幅≥9.6%（非ST）或接口返回的涨跌停价
  *
  * 连板概率考虑因素：
- *   1. 今日封板强度（成交量越小 → 封板越强）
+ *   1. 今日封板强度（封单/成交比）
  *   2. 流通市值（越小越容易连板）
  *   3. 当前连板位置（1板成功率最高）
  *   4. 技术指标位置（KDJ/RSI空间）
  */
-export function calcLimitPrediction(kline: KlineBar[], info: { price: number; changePercent: number; volume: number; marketCap: number; prevClose?: number; limitUp?: number | null; limitDown?: number | null }): LimitPrediction | null {
+export function calcLimitPrediction(
+  kline: KlineBar[],
+  info: { price: number; changePercent: number; volume: number; marketCap: number; prevClose?: number; limitUp?: number | null; limitDown?: number | null; turnoverRate?: number | null; sell1Vol?: number; buy1Vol?: number },
+  extras?: {
+    intraday?: any;
+  }
+): LimitPrediction | null {
   if (!kline || kline.length < 5) return null;
 
   // 优先使用接口返回的涨跌停价
@@ -685,11 +699,50 @@ export function calcLimitPrediction(kline: KlineBar[], info: { price: number; ch
   prob = Math.max(5, Math.min(95, prob));
 
   const nextDayTrend = isLimitUp ? (prob > 50 ? 'up' : 'sideways') : (prob > 50 ? 'down' : 'sideways');
-  const label = isLimitUp ? '涨停' : '跌停';
 
+  const limitLabel = isLimitUp ? (consecutiveCount === 1 ? '首板' : `${consecutiveCount}连板`) : (consecutiveCount === 1 ? '首跌' : `${consecutiveCount}连跌`);
   const analysis = isLimitUp
-    ? `${consecutiveCount}连板，明日连板概率${prob}%。${factors[0] || ''}`
-    : `今日${label}，明日继续跌停概率${prob}%。${factors[0] || ''}`;
+    ? `${limitLabel}，明日连板概率${prob}%。${factors[0] || ''}`
+    : `今日${isLimitDown ? '跌停' : ''}，明日继续跌停概率${prob}%。${factors[0] || ''}`;
+
+  // ─── 封单明细数据 ───
+  const limitPrice = isLimitUp ? (info.limitUp ?? null) : (info.limitDown ?? null);
+
+  // 封单量（涨停=卖一量，跌停=买一量），单位：手
+  const blockVolume = isLimitUp ? (info.sell1Vol || 0) : (info.buy1Vol || 0);
+
+  // 封单额（元）= 封单量(手) × 100 × 涨停价
+  const blockAmount = limitPrice ? blockVolume * 100 * limitPrice : 0;
+
+  // 涨停成交额：分时数据中涨停价成交额
+  let limitVolume = 0;
+  let totalAmount = info.volume ? info.volume * info.price : 0;
+  if (extras?.intraday?.data && limitPrice) {
+    let prevVol = 0;
+    for (const p of extras.intraday.data) {
+      if (p.volume && p.price != null) {
+        const delta = p.volume - prevVol;
+        prevVol = p.volume;
+        if (Math.abs(p.price - limitPrice) < 0.02) {
+          limitVolume += delta * p.price;
+        }
+      }
+    }
+  }
+  if (limitVolume === 0 && limitPrice) {
+    limitVolume = info.volume * limitPrice;
+  }
+  if (extras?.intraday?.data && extras.intraday.data.length > 0) {
+    const last = extras.intraday.data[extras.intraday.data.length - 1];
+    if (last.amount > 0) totalAmount = last.amount;
+  }
+
+  // 封单占成交比(%) = 封单额 / 总成交额
+  const blockRatio = totalAmount > 0 && blockAmount > 0
+    ? Math.round((blockAmount / totalAmount) * 10000) / 100
+    : null;
+
+  const maxBlockAmount = blockAmount;
 
   return {
     isLimitUp,
@@ -699,6 +752,14 @@ export function calcLimitPrediction(kline: KlineBar[], info: { price: number; ch
     nextDayTrend,
     analysis,
     factors,
+    limitPrice,
+    blockVolume,
+    blockAmount,
+    blockRatio,
+    limitVolume,
+    maxBlockAmount,
+    turnoverRate: info.turnoverRate ?? null,
+    totalAmount,
   };
 }
 

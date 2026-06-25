@@ -224,8 +224,13 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   // 涨停/跌停连板预测
   const limitPrediction: LimitPredictionResult | null = useMemo(() => {
     if (!data || !data.kline || data.kline.length < 5) return null;
-    return calcLimitPrediction(data.kline, liveInfo || data.info);
-  }, [data, liveInfo]);
+    const enrichedInfo = {
+      ...(liveInfo || data.info),
+      sell1Vol: (liveQuote as any)?.sell1Vol || 0,
+      buy1Vol: (liveQuote as any)?.buy1Vol || 0,
+    };
+    return calcLimitPrediction(data.kline, enrichedInfo, { intraday });
+  }, [data, liveInfo, liveQuote, intraday]);
 
   // 收盘评分（明日看涨概率）
   const closeRating: CloseRatingResult | null = useMemo(() => {

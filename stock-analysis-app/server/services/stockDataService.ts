@@ -114,10 +114,46 @@ export class StockDataService {
     if (dayAmount <= 0 || dayAmount > 1e12) dayAmount = q.amount;
     if (!isHK && dayAmount < 1e12) dayAmount = dayAmount * 10000;
 
-    // 换手率（dayVolume 统一为"股"，K线来的×100转换过，分时来的已经是股）
-    const volumeShares = dayVolume;
-    const totalShares = q.price > 0 ? ((q.marketCap ?? 0) * 100000000 / q.price) : 0;
-    const turnoverRate = totalShares > 0 ? (volumeShares / totalShares) * 100 : 0;
+    // 直接从腾讯 qt 接口取换手率、涨跌停价、封单量、市值等 stock-sdk 可能没映射的字段
+    let tencentTurnoverRate: number | null = null;
+    let tencentLimitUp: number | null = null;
+    let tencentLimitDown: number | null = null;
+    let tencentSell1Vol = 0; // 卖一量（封单量）
+    let tencentBuy1Vol = 0;  // 买一量（封单量）
+    let tencentMarketCap: number | null = null; // 总市值（元）
+    try {
+      const resp = await fetch(`https://qt.gtimg.cn/q=${normalized}`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const text = await resp.text();
+      const m = text.match(/"(.*)"/);
+      if (m) {
+        const parts = m[1].split('~');
+        if (parts.length > 48) {
+          tencentTurnoverRate = parseFloat(parts[38]) || null;
+          // 合理性检查：换手率合理范围 0-100%
+          if (tencentTurnoverRate != null && (tencentTurnoverRate < 0 || tencentTurnoverRate > 100)) {
+            console.warn(`[TencentRaw] ${normalized}: 换手率异常 ${tencentTurnoverRate}%，忽略使用计算值`);
+            tencentTurnoverRate = null;
+          }
+          tencentLimitUp = parseFloat(parts[47]) || null;
+          tencentLimitDown = parseFloat(parts[48]) || null;
+          tencentSell1Vol = parseInt(parts[10]) || 0;
+          tencentBuy1Vol = parseInt(parts[9]) || 0;
+          tencentMarketCap = parseFloat(parts[44]) || null; // 总市值（元）
+          console.log(`[TencentRaw] ${normalized}: 换手率=${tencentTurnoverRate}% 涨停=${tencentLimitUp} 跌停=${tencentLimitDown} 卖一量=${tencentSell1Vol}手 市值=${tencentMarketCap}`);
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[TencentRaw] Failed: ${e.message}`);
+    }
+
+    // 换手率：优先取腾讯API原始值
+    let turnoverRate = tencentTurnoverRate;
+    if (turnoverRate == null) {
+      // 降级计算
+      const volumeShares = dayVolume;
+      const totalShares = q.price > 0 ? ((q.marketCap ?? 0) * 100000000 / q.price) : 0;
+      turnoverRate = totalShares > 0 ? (volumeShares / totalShares) * 100 : 0;
+    }
 
     // 调试日志
     console.log(`[StockInfo] ${normalized}: price=${q.price} open=${dayOpen} high=${dayHigh} low=${dayLow} vol=${dayVolume} mcap=${q.marketCap} turnover=${turnoverRate.toFixed(4)}%`);
@@ -133,14 +169,17 @@ export class StockDataService {
       low: Math.round(dayLow * 100) / 100,
       volume: dayVolume,
       amount: dayAmount,
-      marketCap: (q.marketCap ?? 0) * (isHK ? 1 : 100000000),
+      marketCap: tencentMarketCap ?? ((q.marketCap ?? 0) * (isHK ? 1 : 100000000)),
       open: Math.round(dayOpen * 100) / 100,
       prevClose: q.price - (q.change || 0),
       turnoverRate: Math.round(turnoverRate * 100) / 100,
-      bid: (q as any).bid || null,
-      ask: (q as any).ask || null,
-      limitUp: (q as any).limitUp || null,
-      limitDown: (q as any).limitDown || null,
+      bid: (q as any).bid || (tencentBuy1Vol > 0 ? [{ price: (q as any).bid?.[0]?.price || 0, volume: tencentBuy1Vol }] : null),
+      ask: (q as any).ask || (tencentSell1Vol > 0 ? [{ price: (q as any).ask?.[0]?.price || 0, volume: tencentSell1Vol }] : null),
+      limitUp: (q as any).limitUp || tencentLimitUp || null,
+      limitDown: (q as any).limitDown || tencentLimitDown || null,
+      // 腾讯原生封单数据（手）
+      buy1Vol: tencentBuy1Vol,
+      sell1Vol: tencentSell1Vol,
     };
   }
 
@@ -379,6 +418,91 @@ export class StockDataService {
       return await this.sdk.getIndividualFundFlow(normalized);
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Get real-time transaction records (逐笔成交)
+   * 使用新浪API，格式简单可靠
+   * URL: https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/InvestorService.getTransactionList?code=sh600519&num=30
+   * 返回: [{"time":"14:59:59","price":180.00,"volume":100,"direction":"买"}, ...]
+   */
+  async getTransactions(code: string, count: number = 30): Promise<any[]> {
+    const normalized = this.normalizeCode(code);
+    const url = `https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/InvestorService.getTransactionList?code=${normalized}&num=${count}`;
+    try {
+      const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+      const text = await resp.text();
+      // 新浪返回JSONP或JSON，先尝试JSON.parse
+      let list: any[];
+      try { list = JSON.parse(text); } catch {
+        // 可能是JSONP: var xxx=[...]; 提取数组
+        const m = text.match(/\[.*\]/s);
+        list = m ? JSON.parse(m[0]) : [];
+      }
+      if (!list || list.length === 0) {
+        console.warn(`[Transactions] Sina empty for ${normalized}`);
+        return [];
+      }
+      console.log(`[Transactions] Sina ${normalized}: ${list.length} records, sample:`, JSON.stringify(list[0]).slice(0, 150));
+      // 转换格式
+      return list.filter((t: any) => t && t.time && parseFloat(t.price) > 0)
+        .map((t: any) => ({
+          time: t.time || '',
+          price: parseFloat(t.price) || 0,
+          volume: parseInt(t.volume) || 0,
+          amount: 0,
+          direction: String(t.direction || '').includes('买') ? 0 : String(t.direction || '').includes('卖') ? 1 : 2,
+        }));
+    } catch (err: any) {
+      console.warn(`[Transactions] Sina failed for ${normalized}: ${err.message}`);
+      // 兜底：腾讯API
+      try {
+        const url2 = `https://ifzq.gtimg.cn/appstock/app/trans/getTrans?code=${normalized}&start=0&num=${count}`;
+        const resp2 = await fetch(url2, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+        const json = await resp2.json() as any;
+        const dataNode = json?.data?.[normalized] || json?.data || {};
+        // 遍历所有字段
+        for (const key of Object.keys(dataNode)) {
+          const val = dataNode[key];
+          if (Array.isArray(val)) {
+            const recs = val.filter((v: any) => Array.isArray(v) && v.length >= 3)
+              .map((v: any[]) => ({
+                time: String(v[0] || ''),
+                price: parseFloat(v[1]) || 0,
+                volume: parseInt(v[2]) || 0,
+                amount: parseFloat(v[3]) || 0,
+                direction: String(v[4] || '').toUpperCase() === 'B' ? 0 : String(v[4] || '').toUpperCase() === 'S' ? 1 : 2,
+              })).filter((r: any) => r.time && r.price > 0);
+            if (recs.length > 0) {
+              console.log(`[Transactions] Tencent fallback ${normalized}: ${recs.length} records`);
+              return recs;
+            }
+          }
+          // 字符串管道格式
+          if (typeof val === 'string' && val.includes('|')) {
+            const lines = val.split(';');
+            const recs = lines.map(l => l.split('|'))
+              .filter(p => p.length >= 3)
+              .map(p => ({
+                time: p[0] || '',
+                price: parseFloat(p[1]) || 0,
+                volume: parseInt(p[2]) || 0,
+                amount: parseFloat(p[3]) || 0,
+                direction: String(p[4] || '').toUpperCase() === 'B' ? 0 : String(p[4] || '').toUpperCase() === 'S' ? 1 : 2,
+              })).filter((r: any) => r.time && r.price > 0);
+            if (recs.length > 0) {
+              console.log(`[Transactions] Tencent pipe fallback ${normalized}: ${recs.length} records`);
+              return recs;
+            }
+          }
+        }
+        console.warn(`[Transactions] Tencent no data for ${normalized}`);
+        return [];
+      } catch (err2: any) {
+        console.warn(`[Transactions] Tencent also failed: ${err2.message}`);
+        return [];
+      }
     }
   }
 

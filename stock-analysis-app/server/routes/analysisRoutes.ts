@@ -54,6 +54,8 @@ router.get('/:code/quote', async (req: Request, res: Response, next: NextFunctio
       ask: (info as any).ask || null,
       limitUp: (info as any).limitUp || null,
       limitDown: (info as any).limitDown || null,
+      buy1Vol: (info as any).buy1Vol || 0,
+      sell1Vol: (info as any).sell1Vol || 0,
     });
   } catch (err) {
     next(err);
@@ -68,6 +70,18 @@ router.get('/:code/fund-flow', async (req: Request, res: Response, next: NextFun
     const data = await stockDataService.getFundFlow(code);
     // 只返回最近的 days 条
     res.json(data.slice(-days));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/stock/:code/transactions — 逐笔成交明细
+router.get('/:code/transactions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const count = Math.min(Math.max(Number(req.query.count) || 30, 5), 100);
+    const data = await stockDataService.getTransactions(code, count);
+    res.json(data);
   } catch (err) {
     next(err);
   }
