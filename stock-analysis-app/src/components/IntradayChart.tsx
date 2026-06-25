@@ -71,47 +71,81 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
     const gradTop = rising ? 'rgba(207,19,34,0.3)' : 'rgba(60,179,113,0.3)';
     const gradBot = rising ? 'rgba(207,19,34,0.02)' : 'rgba(60,179,113,0.02)';
 
-    // ─── 买卖信号标记 ───
+    // ─── 买卖信号标记（实时模拟，不用未来数据） ───
     const marks: any[] = [];
-    if (signals && pts.length > 10) {
+    if (signals && pts.length > 15) {
       const isBuy = signals.overall === 'STRONG_BUY' || signals.overall === 'BUY';
       const isSell = signals.overall === 'STRONG_SELL' || signals.overall === 'SELL';
       if (isBuy || isSell) {
-        let bestIdx = pts.length - 1;
+        let bestIdx = -1;
         let bestScore = -Infinity;
-        for (let i = 5; i < pts.length - 3; i++) {
-          let score = 0;
+        // 只用当前及之前的数据做判断，绝不看 i+1/i+2
+        for (let i = 10; i < pts.length; i++) {
+          const p = pts[i];
+          const dev = isBuy
+            ? (p.avgPrice - p.price) / p.avgPrice   // 正 = 价格在均线下方
+            : (p.price - p.avgPrice) / p.avgPrice;  // 正 = 价格在均线上方
+
+          // 偏差不够大就跳过
+          if (dev < 0.003) continue;
+
+          // 看最近3分钟的价格斜率（只用到 i-2, i-1, i）
+          const slope1 = p.price - pts[i - 1].price;
+          const slope2 = pts[i - 1].price - pts[i - 2].price;
+
+          let score = dev * 1000; // 基础分：偏差越大越好
+
+          // 价格趋势在减缓（斜率由负转正/由正转负）
           if (isBuy) {
-            const dev = (pts[i].avgPrice - pts[i].price) / pts[i].avgPrice;
-            if (dev > 0.005 && pts[i + 1]?.price > pts[i].price && pts[i + 2]?.price > pts[i].price) {
-              score = dev * 1000 + (i < pts.length * 0.7 ? 3 : 0);
-            }
+            // 买：价格在均线下，下跌趋缓或反弹
+            const flattening = slope1 > slope2 && slope2 < 0; // 跌幅收窄
+            const turning = slope1 > 0 && slope2 <= 0;         // 由跌转涨
+            if (flattening) score += 3;
+            if (turning) score += 6;
+            // 如果还在加速下跌，降分
+            if (slope1 < slope2) score -= 4;
           } else {
-            const dev = (pts[i].price - pts[i].avgPrice) / pts[i].avgPrice;
-            if (dev > 0.005 && (pts[i + 1]?.price < pts[i].price || pts[i + 2]?.price < pts[i].price)) {
-              score = dev * 1000 + (i > pts.length * 0.3 ? 3 : 0);
-            }
+            // 卖：价格在均线上，上涨趋缓或回落
+            const flattening = slope1 < slope2 && slope2 > 0; // 涨幅收窄
+            const turning = slope1 < 0 && slope2 >= 0;         // 由涨转跌
+            if (flattening) score += 3;
+            if (turning) score += 6;
+            // 如果还在加速上涨，降分
+            if (slope1 > slope2) score -= 4;
           }
+
+          // 成交量放大加分（近5分钟均量的1.2倍以上）
+          const volSlice = pts.slice(Math.max(0, i - 5), i);
+          const avgVol = volSlice.reduce((s, v) => s + v.volume, 0) / volSlice.length;
+          const curVolDelta = p.volume - (i > 0 ? pts[i - 1].volume : 0);
+          if (curVolDelta > avgVol * 1.2 && avgVol > 0) score += 3;
+
+          // 越早的信号越有价值（前60%的时间加分）
+          if (i < pts.length * 0.6) score += 2;
+
           if (score > bestScore) { bestScore = score; bestIdx = i; }
         }
-        marks.push({
-          name: isBuy ? '买入' : '卖出',
-          coord: [pts[bestIdx].time, pts[bestIdx].price],
-          symbol: 'arrow',
-          symbolSize: [30, 30],
-          symbolRotate: isBuy ? 0 : 180,
-          itemStyle: { color: isBuy ? '#cf1322' : '#3cb371' },
-          label: {
-            formatter: isBuy ? '买入' : '卖出',
-            color: '#fff',
-            backgroundColor: isBuy ? '#cf1322' : '#3cb371',
-            padding: [4, 8],
-            borderRadius: 4,
-            fontSize: 14,
-            fontWeight: 'bold',
-            position: isBuy ? 'top' : 'bottom',
-          },
-        });
+        // 只有得分达到阈值才标记
+        if (bestIdx >= 0 && bestScore > 5) {
+          marks.push({
+            name: isBuy ? '买入' : '卖出',
+            coord: [pts[bestIdx].time, pts[bestIdx].price],
+            symbol: 'arrow',
+            symbolSize: [30, 30],
+            symbolRotate: isBuy ? 0 : 180,
+            itemStyle: { color: isBuy ? '#cf1322' : '#3cb371' },
+            label: {
+              formatter: isBuy ? '买入' : '卖出',
+              color: '#fff',
+              backgroundColor: isBuy ? '#cf1322' : '#3cb371',
+              padding: [4, 8],
+              borderRadius: 4,
+              fontSize: 14,
+              fontWeight: 'bold',
+              position: isBuy ? 'top' : 'bottom',
+            },
+          });
+        }
       }
     }
 

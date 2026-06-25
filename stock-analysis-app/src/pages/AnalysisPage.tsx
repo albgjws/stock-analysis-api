@@ -141,6 +141,31 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     return () => clearTimeout(timer);
   }, [code, fetchQuote, fetchIntraday, fetchFundFlow]);
 
+  // 午盘收盘（11:30）自动刷新一次
+  useEffect(() => {
+    if (!code) return;
+    const now = new Date();
+    const h = now.getHours(), m = now.getMinutes();
+    const time = h * 100 + m;
+    // 只在上午交易时段内设定11:30定时器
+    if (time < 915 || time >= 1130) return;
+
+    const noonTime = new Date();
+    noonTime.setHours(11, 30, 10, 0); // 11:30:10
+    const delay = noonTime.getTime() - now.getTime();
+    if (delay <= 0) return;
+
+    const timer = setTimeout(() => {
+      console.log('[午盘刷新] 触发午盘收盘数据刷新');
+      fetchQuote();
+      fetchIntraday();
+      fetchFundFlow();
+      setLastRefresh(new Date().toLocaleTimeString() + ' 午盘');
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [code, fetchQuote, fetchIntraday, fetchFundFlow]);
+
   // 合并实时行情数据（用于价格/涨跌幅实时更新）
   // 注意：必须放在所有早期 return 之前（React Hook 规则不能条件性调用）
   const liveInfo = useMemo(() => {
