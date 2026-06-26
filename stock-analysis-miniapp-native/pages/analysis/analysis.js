@@ -1,4 +1,4 @@
-var API = require('../../utils/api');
+﻿var API = require('../../utils/api');
 function $(v){return(v||0).toFixed(2)}
 function $Y(v){return'¥'+(v||0).toFixed(2)}
 function V(v){if(!v)return'0';if(v>=1e8)return(v/1e8).toFixed(2)+'亿';if(v>=1e4)return(v/1e4).toFixed(0)+'万';return''+v}
@@ -239,7 +239,7 @@ Page({
     var predRange=lpf?$Y(lpf.lower95)+' ~ '+$Y(lpf.upper95):'—';
 
     // 分时
-    var idD=id&&id.data||[],idP=idD.map(function(p){return p.price}),idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id&&id.preClose||0;
+    var idD=id&&id.data||[],idP=idD.map(function(p){return p.price}),idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id&&id.preClose||0;var idMaxPct=(idMx-pc)/pc*100,idMinPct=(idMn-pc)/pc*100;
     var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
 
     // 复盘
@@ -286,7 +286,7 @@ Page({
 
       sigItems:si,sigDetails:sDet,sigBuyCount:bC,sigSellCount:sC,sigNeutralCount:nC,
 
-      tlBars:tb,idOpenText:$Y(idD[0]&&idD[0].price),idAvgText:$Y(idD[idD.length-1]&&idD[idD.length-1].avgPrice),
+      tlBars:tb,idOpenText:$Y(idD[0]&&idD[0].price),idAvgText:$Y(idD[idD.length-1]&&idD[idD.length-1].avgPrice),idMaxPctText:(idMaxPct>=0?'+':'')+idMaxPct.toFixed(2)+'%',idMinPctText:(idMinPct>=0?'+':'')+idMinPct.toFixed(2)+'%',idMaxPctCls:idMaxPct>=0?'up':'down',idMinPctCls:idMinPct>=0?'up':'down',
 
       hk:1,klCount:kl.length,klLastDate:lb.date,klBars:kbs,
       predTrend:tM[tr]||'—',predCls:tr==='up'?'up':tr==='down'?'down':'neutral',
@@ -418,12 +418,13 @@ Page({
       API.getIntraday(me.data.code).then(function(id){
         if(!id||!id.data||!id.data.length)return;
         var idD=id.data,idP=idD.map(function(p){return p.price});
-        var idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id.preClose||0;
+        var idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id.preClose||0;var idMaxPct=(idMx-pc)/pc*100,idMinPct=(idMn-pc)/pc*100;
         var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
         me.setData({
           tlBars:tb,
           idOpenText:'¥'+$(idD[0]&&idD[0].price),
           idAvgText:'¥'+$(idD[idD.length-1]&&idD[idD.length-1].avgPrice),
+          idMaxPctText:(idMaxPct>=0?'+':'')+idMaxPct.toFixed(2)+'%',idMinPctText:(idMinPct>=0?'+':'')+idMinPct.toFixed(2)+'%',idMaxPctCls:idMaxPct>=0?'up':'down',idMinPctCls:idMinPct>=0?'up':'down',
         });
       }).catch(function(){});
     },15000);

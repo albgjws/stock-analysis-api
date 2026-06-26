@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+﻿import React, { useMemo } from 'react';
 import ReactEChartsCore from 'echarts-for-react';
 import { Card } from 'antd';
 import type { IntradayData, SignalResult } from '../types';
@@ -73,6 +73,64 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
 
     // ─── 买卖信号标记（实时模拟，不用未来数据） ───
     const marks: any[] = [];
+    // ── 最高/最低百分比标注（同花顺风格：标注今日触及过的极限百分比） ──
+    const pctMarks: any[] = [];
+    if (realPrices.length > 0) {
+      let maxPriceVal = -Infinity, maxIdx = -1;
+      let minPriceVal = Infinity, minIdx = -1;
+      for (let i = 0; i < prices.length; i++) {
+        if (prices[i] !== null) {
+          if (prices[i]! > maxPriceVal) { maxPriceVal = prices[i]!; maxIdx = i; }
+          if (prices[i]! < minPriceVal) { minPriceVal = prices[i]!; minIdx = i; }
+        }
+      }
+      // 最高点百分比（右上角）
+      if (maxIdx >= 0) {
+        const maxPct = ((maxPriceVal - pc) / pc * 100);
+        pctMarks.push({
+          coord: [maxIdx, maxPriceVal],
+          label: {
+            formatter: `最高 ${maxPct >= 0 ? '+' : ''}${maxPct.toFixed(2)}%`,
+            color: '#cf1322',
+            fontSize: 12,
+            fontWeight: 'bold',
+            position: maxIdx < prices.length / 2 ? 'right' : 'left',
+            distance: 20,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            borderColor: '#cf1322',
+            borderWidth: 1,
+            padding: [2, 8],
+            borderRadius: 4,
+          },
+          symbol: 'pin',
+          symbolSize: 24,
+          itemStyle: { color: '#cf1322' },
+        });
+      }
+      // 最低点百分比（右下角）
+      if (minIdx >= 0) {
+        const minPct = ((minPriceVal - pc) / pc * 100);
+        pctMarks.push({
+          coord: [minIdx, minPriceVal],
+          label: {
+            formatter: `最低 ${minPct >= 0 ? '+' : ''}${minPct.toFixed(2)}%`,
+            color: '#3cb371',
+            fontSize: 12,
+            fontWeight: 'bold',
+            position: minIdx < prices.length / 2 ? 'right' : 'left',
+            distance: 20,
+            backgroundColor: 'rgba(255,255,255,0.92)',
+            borderColor: '#3cb371',
+            borderWidth: 1,
+            padding: [2, 8],
+            borderRadius: 4,
+          },
+          symbol: 'pin',
+          symbolSize: 24,
+          itemStyle: { color: '#3cb371' },
+        });
+      }
+    }
     if (signals && pts.length > 15) {
       const isBuy = signals.overall === 'STRONG_BUY' || signals.overall === 'BUY';
       const isSell = signals.overall === 'STRONG_SELL' || signals.overall === 'SELL';
@@ -151,6 +209,15 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
 
     const maxHand = Math.max(...handVolumes.filter(v => v !== null) as number[], 1);
 
+    // 计算对称Y轴范围（取最大涨跌幅的较大绝对值，同花顺风格）
+    const maxPctFromData = realPrices.length > 0
+      ? Math.max(...realPrices.map(p => Math.abs((p - pc) / pc)))
+      : 0.01;
+    const yAxisPadding = maxPctFromData * 0.15;
+    const yAxisRangePct = maxPctFromData + yAxisPadding;
+    const yMin = pc * (1 - yAxisRangePct);
+    const yMax = pc * (1 + yAxisRangePct);
+
     return {
       animation: false,
       tooltip: {
@@ -176,8 +243,8 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
         },
       },
       grid: [
-        { left: 65, right: 20, top: '6%', height: '53%' },
-        { left: 60, right: 20, top: '65%', height: '15%' },
+        { left: 65, right: 55, top: '6%', height: '53%' },
+        { left: 60, right: 50, top: '65%', height: '15%' },
       ],
       xAxis: [
         {
@@ -210,17 +277,34 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
       yAxis: [
         {
           type: 'value',
-          scale: true,
+          min: yMin,
+          max: yMax,
           splitArea: {
             show: true,
             areaStyle: { color: ['rgba(250,250,250,0.3)', 'rgba(200,200,200,0.1)'] },
           },
+          axisLine: { show: true },
           axisLabel: {
             formatter: (v: number) =>
               v >= 1000 ? v.toFixed(0) : v >= 100 ? v.toFixed(1) : v.toFixed(2),
             fontSize: 10,
           },
           splitLine: { show: true, lineStyle: { type: 'dashed' } },
+        },
+        // 右侧百分比Y轴（同花顺风格）
+        {
+          type: 'value',
+          min: (pc - yMin) / pc * -100,
+          max: (yMax - pc) / pc * 100,
+          splitNumber: 4,
+          axisLabel: {
+            formatter: (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`,
+            fontSize: 10,
+            color: '#999',
+          },
+          splitLine: { show: false },
+          axisLine: { show: true },
+          position: 'right',
         },
         {
           type: 'value',
@@ -262,7 +346,7 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
             data: [{
               yAxis: pc,
               label: {
-                formatter: `昨收 ${pc.toFixed(2)}`,
+                formatter: `昨收 ${pc.toFixed(2)}  (0.00%)`,
                 color: '#999',
                 fontSize: 10,
                 position: 'insideEndTop',
@@ -270,7 +354,7 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
               lineStyle: { color: '#999', type: 'dashed', width: 1 },
             }],
           },
-          markPoint: { data: marks },
+          markPoint: { data: [...pctMarks, ...marks], label: { show: true } },
         },
         // ── 均价线 ──
         {
@@ -287,7 +371,7 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           name: '成交量',
           type: 'bar',
           xAxisIndex: 1,
-          yAxisIndex: 1,
+          yAxisIndex:  2,
           data: handVolumes.map((v, i) => {
             if (v == null) return { value: 0, itemStyle: { color: 'transparent' } };
             return {
@@ -341,3 +425,6 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
     </Card>
   );
 }
+
+
+

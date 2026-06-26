@@ -1,4 +1,4 @@
-<view class="page">
+﻿<view class="page">
 
   <!-- Loading / Error -->
   <view wx:if="{{loading}}" class="page-center">
@@ -266,6 +266,10 @@
         <text>开 {{idOpenText}}</text>
         <text class="price-{{cc}}">最新 {{priceText}}</text>
         <text>均 {{idAvgText}}</text>
+      </view>
+      <view class="rw" style="font-size:11px;color:#999;margin-top:2px;">
+        <text class="price-{{idMaxPctCls}}">高 {{idMaxPctText}}</text>
+        <text class="price-{{idMinPctCls}}" style="margin-left:16px;">低 {{idMinPctText}}</text>
       </view>
     </view>
 
