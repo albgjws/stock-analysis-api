@@ -412,12 +412,12 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           )}
         </span>
       }
-      style={{ borderRadius: 8, width: '100%', height: 400 }}
-      styles={{ body: { padding: '12px 0', height: 362 } }}
+      style={{ borderRadius: 8, width: '100%', height: 420 }}
+      styles={{ body: { padding: '12px 0', height: 382 } }}
     >
       <ReactEChartsCore
         option={option}
-        style={{ height: 362, width: '100%' }}
+        style={{ height: 382, width: '100%' }}
         showLoading={loading}
         notMerge
         lazyUpdate

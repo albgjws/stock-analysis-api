@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+﻿import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Card } from 'antd';
 import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
@@ -27,7 +27,7 @@ import type { MarketRecapResult } from '../utils/marketRecap';
 import type { AdvancedSignals, LimitPrediction as LimitPredictionResult, CloseRating as CloseRatingResult } from '../utils/advancedIndicators';
 import LimitPredictionBanner from '../components/LimitPredictionBanner';
 import Level5Panel from '../components/Level5Panel';
-import TransactionDetails from '../components/TransactionDetails';
+
 import { getTransactions } from '../api/stockApi';
 import CloseRatingCard from '../components/CloseRatingCard';
 
@@ -54,6 +54,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
   // 逐笔成交明细
   const [transactions, setTransactions] = useState<any[] | null>(null);
+  
   const [transLoading, setTransLoading] = useState(false);
 
   // 实时行情（用于更新涨跌幅）
@@ -374,18 +375,14 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
             lastRefresh={lastRefresh}
           />
         </div>
-        <div className="level5-container">
-          <TransactionDetails
-            data={transactions}
-            loading={transLoading}
-          />
-        </div>
-        <div className="level5-container">
+        <div style={{ width: 280 }}>
           <Level5Panel
             bid={liveQuote?.bid || (data as any)?.info?.bid}
             ask={liveQuote?.ask || (data as any)?.info?.ask}
             price={liveInfo?.price}
             changePercent={liveInfo?.changePercent}
+            transactions={transactions}
+            transLoading={transLoading}
           />
         </div>
       </div>
