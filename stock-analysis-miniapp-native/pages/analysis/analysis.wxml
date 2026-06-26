@@ -62,6 +62,24 @@
       </view>
     </view>
 
+    <!-- ===== 逐笔成交明细（同花顺风格：折叠显示前10条，点击展开） ===== -->
+    <view wx:if="{{txData&&txData.length>0}}" class="card" style="padding:8px 12px;">
+      <view style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <text style="font-size:12px;color:#999;">逐笔成交</text>
+        <text wx:if="{{txData.length>10}}" bindtap="toggleTxExpanded" style="font-size:11px;color:#1677ff;padding:4rpx 8rpx;">{{txExpanded?'收起':'展开全部'}}</text>
+      </view>
+      <view style="display:flex;align-items:center;padding:4rpx 0;font-size:10px;color:#999;border-bottom:1rpx solid #f0f0f0;">
+        <text style="width:80rpx;">时间</text>
+        <text style="flex:1;text-align:right;">价格</text>
+        <text style="width:90rpx;text-align:right;">手数</text>
+      </view>
+      <view wx:for="{{txExpanded?txData:txData.slice(0,10)}}" wx:key="index" style="display:flex;align-items:center;padding:4rpx 0;font-size:11px;border-bottom:1rpx solid #fafafa;">
+        <text style="width:80rpx;color:#666;">{{item.tTxt}}</text>
+        <text style="flex:1;text-align:right;font-weight:600;color:{{item.direction===0?'#cf1322':item.direction===1?'#3cb371':'#999'}};">¥{{item.pTxt}}</text>
+        <text style="width:90rpx;text-align:right;color:{{item.direction===0?'#cf1322':item.direction===1?'#3cb371':'#999'}};">{{item.vTxt}}</text>
+      </view>
+    </view>
+
     <!-- ===== 五档盘口 ===== -->
     <view wx:if="{{bid&&bid.length}}" class="card" style="padding:10px 16px;">
       <view style="display:flex;justify-content:space-between;font-size:12px;color:#999;margin-bottom:4px;">
@@ -71,8 +89,8 @@
       </view>
       <view wx:for="{{ask}}" wx:key="id" style="display:flex;justify-content:space-between;align-items:center;height:22px;position:relative;">
         <view style="position:absolute;right:0;height:100%;width:{{item.volPct}}%;background:rgba(60,179,113,0.1);border-radius:2rpx;"></view>
-        <text style="width:40rpx;font-size:10px;color:#999;z-index:1;">卖{{index+5}}</text>
-        <text style="flex:1;font-size:12px;font-weight:600;color:#3cb371;text-align:center;z-index:1;">{{item.price.toFixed(2)}}</text>
+        <text style="width:40rpx;font-size:10px;color:#999;z-index:1;">卖{{item.label}}</text>
+        <text style="flex:1;font-size:12px;font-weight:600;color:#3cb371;text-align:center;z-index:1;">{{item.pTxt}}</text>
         <text style="width:90rpx;font-size:11px;color:#666;text-align:right;z-index:1;">{{item.volTxt}}</text>
       </view>
       <view style="text-align:center;font-size:18px;font-weight:700;color:{{cc==='up'?'#cf1322':'#3cb371'}};padding:4rpx 0;border-top:1rpx solid #f0f0f0;border-bottom:1rpx solid #f0f0f0;margin:4rpx 0;">
@@ -80,8 +98,8 @@
       </view>
       <view wx:for="{{bid}}" wx:key="id" style="display:flex;justify-content:space-between;align-items:center;height:22px;position:relative;">
         <view style="position:absolute;right:0;height:100%;width:{{item.volPct}}%;background:rgba(207,19,34,0.1);border-radius:2rpx;"></view>
-        <text style="width:40rpx;font-size:10px;color:#999;z-index:1;">买{{index+1}}</text>
-        <text style="flex:1;font-size:12px;font-weight:600;color:#cf1322;text-align:center;z-index:1;">{{item.price.toFixed(2)}}</text>
+        <text style="width:40rpx;font-size:10px;color:#999;z-index:1;">买{{item.label}}</text>
+        <text style="flex:1;font-size:12px;font-weight:600;color:#cf1322;text-align:center;z-index:1;">{{item.pTxt}}</text>
         <text style="width:90rpx;font-size:11px;color:#666;text-align:right;z-index:1;">{{item.volTxt}}</text>
       </view>
     </view>
@@ -259,7 +277,7 @@
       </view>
       <view style="display:flex;margin-top:4rpx;gap:0;">
         <view wx:for="{{tlBars}}" wx:key="idx" style="flex:1;text-align:center;">
-          <text wx:if="{{item.lb}}" style="font-size:8px;color:#999;">{{item.time}}</text>
+          <text wx:if="{{item.lb}}" style="font-size:8px;color:#999;">{{item.tTxt}}</text>
         </view>
       </view>
       <view class="rw" style="font-size:12px;color:#999;margin-top:6px;">

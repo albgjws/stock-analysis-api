@@ -22,5 +22,6 @@ module.exports = {
   getFundFlow: code => request(`${BASE_URL}/${encodeURIComponent(code)}/fund-flow?days=60`),
   getBacktest: code => request(`${BASE_URL}/${encodeURIComponent(code)}/backtest`),
   getQuote: code => request(`${BASE_URL}/${encodeURIComponent(code)}/quote`),
+  getTransactions: (code, count) => request(`${BASE_URL}/${encodeURIComponent(code)}/transactions?count=${count}`),
   getMarketIndices: () => request(`${BASE_URL}/indices`),
 };

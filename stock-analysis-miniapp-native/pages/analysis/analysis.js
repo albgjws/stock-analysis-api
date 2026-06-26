@@ -37,6 +37,7 @@ Page({
     crScore:0,crProb:50,crSummary:'',crRating:'中性震荡',crGood:0,crBad:0,
 
     buyVal:'',diag:null,diagScoreCls:'',diagProbCls:'',diagProbTxt:'',diagSlText:'',diagTpText:'',
+    txExpanded:false,txData:[],
   },
 
   onLoad(o){
@@ -241,6 +242,8 @@ Page({
     // 分时
     var idD=id&&id.data||[],idP=idD.map(function(p){return p.price}),idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id&&id.preClose||0;var idMaxPct=(idMx-pc)/pc*100,idMinPct=(idMn-pc)/pc*100;
     var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
+    // 逐笔成交初始加载
+    API.getTransactions(c,50).then(function(td){if(td&&td.length){me.setData({txData:td.map(function(x){x.tTxt=x.time.slice(0,5);x.tTxt=x.time.slice(0,5);x.pTxt=x.price.toFixed(2);x.vTxt=x.volume>=1e8?(x.volume/1e8).toFixed(2)+'亿':x.volume>=1e4?(x.volume/1e4).toFixed(1)+'万':''+x.volume.toLocaleString();return x})})}}).catch(function(){});
 
     // 复盘
     var lb=hk?kl[kl.length-1]:{},avg=hk?kl.slice(-20).reduce(function(s,b){return s+b.volume},0)/20:0,tv=lb.volume||0;
@@ -396,8 +399,8 @@ Page({
         var ch=q.change||0,cc=ch>0?'up':ch<0?'down':'neutral';
         // 五档处理
         var bidArr=[],askArr=[],maxV=1;
-        if(q.bid&&q.bid.length){bidArr=q.bid.map(function(b){return{price:b.price,volume:b.volume,volTxt:b.volume>=1e4?(b.volume/1e4).toFixed(1)+'万':''+b.volume,volPct:0}});maxV=Math.max.apply(null,q.bid.map(function(b){return b.volume}))}
-        if(q.ask&&q.ask.length){askArr=q.ask.map(function(a){return{price:a.price,volume:a.volume,volTxt:a.volume>=1e4?(a.volume/1e4).toFixed(1)+'万':''+a.volume,volPct:0}});maxV=Math.max(maxV,Math.max.apply(null,q.ask.map(function(a){return a.volume})))}
+        if(q.bid&&q.bid.length){bidArr=q.bid.map(function(b,i){return{price:b.price,volume:b.volume,volTxt:b.volume>=1e4?(b.volume/1e4).toFixed(1)+'万':''+b.volume,volPct:0,label:i+1}});maxV=Math.max.apply(null,q.bid.map(function(b){return b.volume}))}
+        if(q.ask&&q.ask.length){askArr=q.ask.map(function(a,i){return{price:a.price,volume:a.volume,volTxt:a.volume>=1e4?(a.volume/1e4).toFixed(1)+'万':''+a.volume,volPct:0,label:q.ask.length-i}});maxV=Math.max(maxV,Math.max.apply(null,q.ask.map(function(a){return a.volume})))}
         if(maxV>0){bidArr=bidArr.map(function(b){b.volPct=Math.round(b.volume/maxV*100);return b});askArr=askArr.map(function(a){a.volPct=Math.round(a.volume/maxV*100);return a})}
         me.setData({
           priceText:'¥'+(q.price||0).toFixed(2),cc:cc,
@@ -412,6 +415,14 @@ Page({
         });
       }).catch(function(){});
     },5000);
+    // 逐笔成交轮询 60秒
+    me._txTimer=setInterval(function(){
+      if(!me.isMarketOpen())return;
+      API.getTransactions(me.data.code,50).then(function(td){
+        if(!td||!td.length)return;
+        me.setData({txData:td.map(function(x){x.tTxt=x.time.slice(0,5);x.tTxt=x.time.slice(0,5);x.pTxt=x.price.toFixed(2);x.vTxt=x.volume>=1e8?(x.volume/1e8).toFixed(2)+'亿':x.volume>=1e4?(x.volume/1e4).toFixed(1)+'万':''+x.volume.toLocaleString();return x})});
+      }).catch(function(){});
+    },60000);
     // 分时轮询 15秒
     me._tlTimer=setInterval(function(){
       if(!me.isMarketOpen())return;
@@ -434,6 +445,7 @@ Page({
 
   stopPolling(){
     if(this._quoteTimer){clearInterval(this._quoteTimer);this._quoteTimer=null}
+    if(this._txTimer){clearInterval(this._txTimer);this._txTimer=null}
     if(this._tlTimer){clearInterval(this._tlTimer);this._tlTimer=null}
     if(this._idxTimer){clearInterval(this._idxTimer);this._idxTimer=null}
     if(this._closeTimer){clearTimeout(this._closeTimer);this._closeTimer=null}
@@ -443,7 +455,9 @@ Page({
   onHide(){this.stopPolling()},
 
   // 收盘后（15:01）自动刷新一次
-  scheduleCloseRefresh(){
+  toggleTxExpanded(){this.setData({txExpanded:!this.data.txExpanded})},
+
+    scheduleCloseRefresh(){
     var me=this;
     var now=new Date(),h=now.getHours(),m=now.getMinutes();
     var t=h*100+m;

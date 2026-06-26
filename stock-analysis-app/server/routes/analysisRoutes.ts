@@ -1,4 +1,4 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
+﻿import { Router, type Request, type Response, type NextFunction } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { StockDataService, StockNotFoundError } from '../services/stockDataService';
@@ -75,7 +75,9 @@ router.get('/:code/fund-flow', async (req: Request, res: Response, next: NextFun
   }
 });
 
+
 // GET /api/stock/:code/transactions — 逐笔成交明细
+
 router.get('/:code/transactions', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { code } = req.params;

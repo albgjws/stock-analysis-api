@@ -23,11 +23,8 @@ export default function Level5Panel({ bid, ask, price, changePercent }: Level5Pr
   const askReverse = [...ask].reverse();
   const buyDirect = [...bid];
 
-  const maxVol = Math.max(
-    ...ask.map(a => a.volume),
-    ...bid.map(b => b.volume),
-    1
-  );
+  const allRows = [...askReverse, ...buyDirect];
+  const maxVol = Math.max(...allRows.map(r => r.volume), 1);
 
   return (
     <Card
@@ -40,14 +37,14 @@ export default function Level5Panel({ bid, ask, price, changePercent }: Level5Pr
         {askReverse.map((a, i) => (
           <div key={`ask-${i}`} style={{ display: 'flex', alignItems: 'center', height: 24, position: 'relative' }}>
             <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: `${(a.volume / maxVol) * 100}%`, background: 'rgba(60,179,113,0.12)', borderRadius: 2 }} />
-            <span style={{ width: 30, fontSize: 11, color: '#999', flexShrink: 0, position: 'relative', zIndex: 1 }}>卖{i + 5}</span>
+            <span style={{ width: 30, fontSize: 11, color: '#999', flexShrink: 0, position: 'relative', zIndex: 1 }}>卖{askReverse.length - i}</span>
             <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#3cb371', position: 'relative', zIndex: 1 }}>{a.price.toFixed(2)}</span>
             <span style={{ width: 70, textAlign: 'right', fontSize: 11, color: '#666', position: 'relative', zIndex: 1 }}>{a.volume.toLocaleString()}</span>
           </div>
         ))}
       </div>
       <div style={{ textAlign: 'center', padding: '4px 0', margin: '4px 0', borderTop: '1px solid #f0f0f0', borderBottom: '1px solid #f0f0f0', fontSize: 18, fontWeight: 700, color: tickColor }}>
-        {price?.toFixed(2) || '—'}
+        {price?.toFixed(2) || '\u2014'}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {buyDirect.map((b, i) => (

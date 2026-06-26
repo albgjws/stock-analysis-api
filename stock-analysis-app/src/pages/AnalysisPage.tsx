@@ -27,6 +27,8 @@ import type { MarketRecapResult } from '../utils/marketRecap';
 import type { AdvancedSignals, LimitPrediction as LimitPredictionResult, CloseRating as CloseRatingResult } from '../utils/advancedIndicators';
 import LimitPredictionBanner from '../components/LimitPredictionBanner';
 import Level5Panel from '../components/Level5Panel';
+import TransactionDetails from '../components/TransactionDetails';
+import { getTransactions } from '../api/stockApi';
 import CloseRatingCard from '../components/CloseRatingCard';
 
 interface AnalysisPageProps {
@@ -49,6 +51,10 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
   // 资金流向
   const [fundFlow, setFundFlow] = useState<any[] | null>(null);
+
+  // 逐笔成交明细
+  const [transactions, setTransactions] = useState<any[] | null>(null);
+  const [transLoading, setTransLoading] = useState(false);
 
   // 实时行情（用于更新涨跌幅）
   const [liveQuote, setLiveQuote] = useState<any>(null);
@@ -77,6 +83,19 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     }
   }, [code]);
 
+  const fetchTransactions = useCallback(async () => {
+    if (!code) return;
+    setTransLoading(true);
+    try {
+      const data = await getTransactions(code, 50);
+      setTransactions(data);
+    } catch {
+      // 静默失败
+    } finally {
+      setTransLoading(false);
+    }
+  }, [code]);
+
   const fetchQuote = useCallback(async () => {
     if (!code) return;
     try {
@@ -94,6 +113,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     fetchQuote();
     fetchIntraday();
     fetchFundFlow();
+    fetchTransactions();
   }, [retry, fetchQuote, fetchIntraday, fetchFundFlow]);
 
   // 首次加载
@@ -105,6 +125,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       getIntraday(code).then(setIntraday).catch(() => null),
       getFundFlow(code, 60).then(setFundFlow).catch(() => null),
       getQuote(code).then(setLiveQuote).catch(() => null),
+      getTransactions(code, 50).then(setTransactions).catch(() => null),
     ]).finally(() => {
       setIntradayLoading(false);
       setLastRefresh(new Date().toLocaleTimeString());
@@ -114,6 +135,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   // 自动轮询：盘中实时分析频率更高，非交易时段不轮询行情
   usePolling(fetchIntraday, isActive && !!code ? 15000 : null, isActive, true);
   usePolling(fetchFundFlow, isActive && !!code ? 60000 : null, isActive, false);
+  usePolling(fetchTransactions, isActive && !!code ? 60000 : null, isActive, false);
   usePolling(fetchQuote, !!code ? 5000 : null, true, true);
 
   // 收盘后（15:01）自动刷新一次获取最终数据
@@ -135,6 +157,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       fetchQuote();
       fetchIntraday();
       fetchFundFlow();
+      fetchTransactions();
       setLastRefresh(new Date().toLocaleTimeString() + ' 收盘');
     }, delay);
 
@@ -160,6 +183,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       fetchQuote();
       fetchIntraday();
       fetchFundFlow();
+      fetchTransactions();
       setLastRefresh(new Date().toLocaleTimeString() + ' 午盘');
     }, delay);
 
@@ -348,6 +372,12 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
             loading={intradayLoading}
             signals={signals}
             lastRefresh={lastRefresh}
+          />
+        </div>
+        <div className="level5-container">
+          <TransactionDetails
+            data={transactions}
+            loading={transLoading}
           />
         </div>
         <div className="level5-container">

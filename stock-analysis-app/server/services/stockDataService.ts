@@ -1,4 +1,4 @@
-import { StockSDK } from 'stock-sdk';
+﻿import { StockSDK } from 'stock-sdk';
 import { CacheService } from './cacheService';
 import { config } from '../config';
 import type { SearchResultItem, StockInfo, KlineBar } from '../types';
@@ -369,43 +369,65 @@ export class StockDataService {
    */
   async getTodayTimeline(code: string): Promise<any> {
     const normalized = this.normalizeCode(code);
+    // 1. Try stock-sdk
     try {
       const result = await this.sdk.getTodayTimeline(normalized);
       if (result?.data?.length > 0) {
+        // Save to disk cache for offline fallback
         try {
-          const existingTimes = new Set(result.data.map((d: any) => d.time));
-          const hasPreMarket = Array.from(existingTimes).some((t: string) => t.startsWith('09:1'));
-          if (!hasPreMarket) {
-            // 直接调腾讯 5分K线 API 获取集合竞价数据
-            const today = new Date().toISOString().split('T')[0];
-            const url = `https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=${normalized},5min,${today},${today},5,qfq`;
-            const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            const json = await resp.json() as any;
-            const k5 = json?.data?.[normalized]?.['5min'] || [];
-            const preOpen: any[] = [];
-            for (const item of k5) {
-              if (!Array.isArray(item) || item.length < 6) continue;
-              const ds = String(item[0]);
-              const hhmm = ds.length >= 10 ? ds.slice(-4, -2) + ':' + ds.slice(-2) : '';
-              const closeP = parseFloat(item[2]) || 0;
-              const highP = parseFloat(item[3]) || 0;
-              const lowP = parseFloat(item[4]) || 0;
-              const vol = parseInt(item[5]) || 0;
-              if (['09:15','09:20','09:25'].includes(hhmm) && closeP > 0) {
-                preOpen.push({ time: hhmm, price: closeP, avgPrice: (highP + lowP) / 2 || closeP, volume: vol, amount: vol * closeP });
-              }
-            }
-            if (preOpen.length > 0) {
-              result.data = [...preOpen, ...result.data];
-            }
-          }
+          const cacheKey = `timeline_${normalized}`;
+          this.cache.set(cacheKey, result, 86400000);
         } catch {}
+        return result;
       }
-      return result;
-    } catch {
-      return this.sdk.getTodayTimeline(normalized);
-    }
+    } catch {}
+
+    // 2. Try disk cache
+    try {
+      const cacheKey = `timeline_${normalized}`;
+      const cached = await this.cache.get<any>(cacheKey, true);
+      if (cached?.data?.length > 0) {
+        console.log(`[Timeline] Cache hit ${normalized}: ${cached.data.length} points`);
+        return cached;
+      }
+    } catch {}
+
+    // 3. Try reconstruct from transaction cache
+    try {
+      const prefix = 'trans_' + normalized + '_';
+      const readdir = (await import('fs/promises')).readdir;
+      const pathJoin = (await import('path')).join;
+      const files = await readdir(config.cacheDir);
+      const matchFile = files.filter((f: string) => f.startsWith(prefix) && f.endsWith('.json')).sort().reverse()[0];
+      if (matchFile) {
+        const raw = await (await import('fs/promises')).readFile(pathJoin(config.cacheDir, matchFile), 'utf-8');
+        const entry = JSON.parse(raw);
+        if (entry?.data?.length > 0) {
+          const txData = entry.data as any[];
+          // Convert transaction records back to timeline format
+          const tlData = txData.map((t: any) => ({
+            time: t.time,
+            price: t.price,
+            avgPrice: t.price,
+            volume: t.volume,
+            amount: t.volume * t.price * 100,
+          }));
+          const result2 = { data: tlData, preClose: 0 };
+          // Estimate preClose from first valid price
+          const firstPrice = tlData.find((d: any) => d.price > 0);
+          if (tlData.length > 10) {
+            const yesterdayPrice = tlData[Math.min(5, tlData.length-1)]?.price || tlData[0].price;
+            result2.preClose = yesterdayPrice;
+          }
+          console.log(`[Timeline] Restored from tx cache ${normalized}: ${tlData.length} points`);
+          return result2;
+        }
+      }
+    } catch {}
+
+    return { data: [], preClose: 0 };
   }
+
 
   /**
    * Get individual stock fund flow (主力资金流向)
@@ -429,81 +451,220 @@ export class StockDataService {
    */
   async getTransactions(code: string, count: number = 30): Promise<any[]> {
     const normalized = this.normalizeCode(code);
-    const url = `https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/InvestorService.getTransactionList?code=${normalized}&num=${count}`;
+    const cacheKey = `trans_${normalized}_${count}`;
+
+    // 工具函数：转换东财格式
+    const toResult = (list: any[]) => list.filter((t: any) => t && t.time && t.price > 0)
+      .map((t: any) => ({
+        time: t.time || '',
+        price: t.price || 0,
+        volume: t.volume || 0,
+        amount: t.amount || 0,
+        direction: t.direction ?? 2,
+      }));
+
+    // 1. 新浪API
     try {
+      const url = `https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/InvestorService.getTransactionList?code=${normalized}&num=${count}`;
       const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
       const text = await resp.text();
-      // 新浪返回JSONP或JSON，先尝试JSON.parse
       let list: any[];
       try { list = JSON.parse(text); } catch {
-        // 可能是JSONP: var xxx=[...]; 提取数组
         const m = text.match(/\[.*\]/s);
         list = m ? JSON.parse(m[0]) : [];
       }
-      if (!list || list.length === 0) {
-        console.warn(`[Transactions] Sina empty for ${normalized}`);
-        return [];
+      if (list && list.length > 0) {
+        const result = list.filter((t: any) => t && t.time && parseFloat(t.price) > 0)
+          .map((t: any) => ({
+            time: t.time || '',
+            price: parseFloat(t.price) || 0,
+            volume: parseInt(t.volume) || 0,
+            amount: 0,
+            direction: String(t.direction || '').includes('买') ? 0 : String(t.direction || '').includes('卖') ? 1 : 2,
+          }));
+        if (result.length > 0) {
+          console.log(`[Transactions] Sina ${normalized}: ${result.length} records`);
+          this.cache.set(cacheKey, result, 86400000); // 缓存1天
+          return result;
+        }
       }
-      console.log(`[Transactions] Sina ${normalized}: ${list.length} records, sample:`, JSON.stringify(list[0]).slice(0, 150));
-      // 转换格式
-      return list.filter((t: any) => t && t.time && parseFloat(t.price) > 0)
-        .map((t: any) => ({
-          time: t.time || '',
-          price: parseFloat(t.price) || 0,
-          volume: parseInt(t.volume) || 0,
-          amount: 0,
-          direction: String(t.direction || '').includes('买') ? 0 : String(t.direction || '').includes('卖') ? 1 : 2,
-        }));
+      console.warn(`[Transactions] Sina empty for ${normalized}`);
     } catch (err: any) {
       console.warn(`[Transactions] Sina failed for ${normalized}: ${err.message}`);
-      // 兜底：腾讯API
-      try {
-        const url2 = `https://ifzq.gtimg.cn/appstock/app/trans/getTrans?code=${normalized}&start=0&num=${count}`;
-        const resp2 = await fetch(url2, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
-        const json = await resp2.json() as any;
-        const dataNode = json?.data?.[normalized] || json?.data || {};
-        // 遍历所有字段
-        for (const key of Object.keys(dataNode)) {
-          const val = dataNode[key];
-          if (Array.isArray(val)) {
-            const recs = val.filter((v: any) => Array.isArray(v) && v.length >= 3)
-              .map((v: any[]) => ({
-                time: String(v[0] || ''),
-                price: parseFloat(v[1]) || 0,
-                volume: parseInt(v[2]) || 0,
-                amount: parseFloat(v[3]) || 0,
-                direction: String(v[4] || '').toUpperCase() === 'B' ? 0 : String(v[4] || '').toUpperCase() === 'S' ? 1 : 2,
-              })).filter((r: any) => r.time && r.price > 0);
-            if (recs.length > 0) {
-              console.log(`[Transactions] Tencent fallback ${normalized}: ${recs.length} records`);
-              return recs;
-            }
-          }
-          // 字符串管道格式
-          if (typeof val === 'string' && val.includes('|')) {
-            const lines = val.split(';');
-            const recs = lines.map(l => l.split('|'))
-              .filter(p => p.length >= 3)
-              .map(p => ({
-                time: p[0] || '',
-                price: parseFloat(p[1]) || 0,
-                volume: parseInt(p[2]) || 0,
-                amount: parseFloat(p[3]) || 0,
-                direction: String(p[4] || '').toUpperCase() === 'B' ? 0 : String(p[4] || '').toUpperCase() === 'S' ? 1 : 2,
-              })).filter((r: any) => r.time && r.price > 0);
-            if (recs.length > 0) {
-              console.log(`[Transactions] Tencent pipe fallback ${normalized}: ${recs.length} records`);
-              return recs;
-            }
+    }
+
+    // 2. 腾讯API兜底
+    try {
+      const url2 = `https://ifzq.gtimg.cn/appstock/app/trans/getTrans?code=${normalized}&start=0&num=${count}`;
+      const resp2 = await fetch(url2, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) });
+      const json = await resp2.json() as any;
+      const dataNode = json?.data?.[normalized] || json?.data || {};
+      for (const key of Object.keys(dataNode)) {
+        const val = dataNode[key];
+        if (Array.isArray(val)) {
+          const recs = val.filter((v: any) => Array.isArray(v) && v.length >= 3)
+            .map((v: any[]) => ({
+              time: String(v[0] || ''),
+              price: parseFloat(v[1]) || 0,
+              volume: parseInt(v[2]) || 0,
+              amount: parseFloat(v[3]) || 0,
+              direction: String(v[4] || '').toUpperCase() === 'B' ? 0 : String(v[4] || '').toUpperCase() === 'S' ? 1 : 2,
+            })).filter((r: any) => r.time && r.price > 0);
+          if (recs.length > 0) {
+            console.log(`[Transactions] Tencent ${normalized}: ${recs.length} records`);
+            this.cache.set(cacheKey, recs, 86400000);
+            return recs;
           }
         }
-        console.warn(`[Transactions] Tencent no data for ${normalized}`);
-        return [];
-      } catch (err2: any) {
-        console.warn(`[Transactions] Tencent also failed: ${err2.message}`);
-        return [];
+        if (typeof val === 'string' && val.includes('|')) {
+          const lines = val.split(';');
+          const recs = lines.map(l => l.split('|'))
+            .filter(p => p.length >= 3)
+            .map(p => ({
+              time: p[0] || '',
+              price: parseFloat(p[1]) || 0,
+              volume: parseInt(p[2]) || 0,
+              amount: parseFloat(p[3]) || 0,
+              direction: String(p[4] || '').toUpperCase() === 'B' ? 0 : String(p[4] || '').toUpperCase() === 'S' ? 1 : 2,
+            })).filter((r: any) => r.time && r.price > 0);
+          if (recs.length > 0) {
+            console.log(`[Transactions] Tencent pipe ${normalized}: ${recs.length} records`);
+            this.cache.set(cacheKey, recs, 86400000);
+            return recs;
+          }
+        }
+      }
+      console.warn(`[Transactions] Tencent no data for ${normalized}`);
+    } catch (err2: any) {
+      console.warn(`[Transactions] Tencent also failed: ${err2.message}`);
+    }
+
+    // 3. 东方财富API（多端点 + 调试日志）
+    const emPrefix = normalized.startsWith('sh') ? '1.' : normalized.startsWith('sz') ? '0.' : normalized.startsWith('bj') ? '0.' : '1.';
+    const emSecid = emPrefix + normalized.replace(/^(sh|sz|bj)/, '');
+    const ts = Date.now();
+    const emUrls = [
+      `https://push2.eastmoney.com/api/qt/stock/stocktick/get?secid=${emSecid}&fields1=f1,f2,f3,f4,f5&fields2=f6,f7,f8,f9,f10,f11,f12,f13&count=${Math.min(count, 100)}&lmt=${Math.min(count, 100)}&_=${ts}`,
+      `https://push2.eastmoney.com/api/qt/stock/stocktick/get?secid=${emSecid}&fields1=f1,f2,f3,f4,f5&fields2=f6,f7,f8,f9,f10,f11,f12,f13&count=${Math.min(count, 100)}&_=${ts}`,
+    ];
+    for (const url3 of emUrls) {
+      try {
+        const resp3 = await fetch(url3, { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://quote.eastmoney.com/' }, signal: AbortSignal.timeout(5000) });
+        const json3 = await resp3.json() as any;
+        console.log(`[Transactions] EM raw response: data=`, JSON.stringify(json3?.data).slice(0, 300));
+        // 东财逐笔：v[0]=时间HHmmssfff, v[1]=价格(分), v[2]=量(股), v[3]=额, v[4]=方向(1买2卖)
+        const emRaw = Array.isArray(json3?.data?.data) ? json3.data.data :
+                      Array.isArray(json3?.data?.diff) ? json3.data.diff :
+                      Array.isArray(json3?.data?.list) ? json3.data.list :
+                      Array.isArray(json3?.data) ? json3.data : [];
+        if (emRaw.length > 0) {
+          const recs = emRaw.map((v: any[]) => {
+            let t = String(v[0] || '');
+            t = t.padStart(9, '0');
+            t = t.slice(0, 2) + ':' + t.slice(2, 4);
+            let p = parseFloat(v[1]) || 0;
+            if (p > 1000) p = p / 100;
+            let vol = parseInt(v[2]) || 0;
+            vol = Math.round(vol / 100);
+            return {
+              time: t,
+              price: p,
+              volume: Math.max(1, vol),
+              amount: parseFloat(v[3]) || 0,
+              direction: v[4] === 1 ? 0 : v[4] === 2 ? 1 : 2,
+            };
+          }).filter((r: any) => r.time && r.time.length >= 4 && r.price > 0);
+          if (recs.length > 0) {
+            console.log(`[Transactions] EastMoney OK ${normalized}: ${recs.length} records`);
+            this.cache.set(cacheKey, recs, 86400000);
+            return recs;
+          }
+        }
+        console.warn(`[Transactions] EastMoney empty for url=${url3.slice(0, 100)} raw=${JSON.stringify(json3).slice(0, 200)}`);
+      } catch (err3: any) {
+        console.warn(`[Transactions] EastMoney error: ${err3.message}`);
       }
     }
+    // 额外尝试：东财外盘/内盘成交（历史逐笔）
+    try {
+      const url4 = `https://push2.eastmoney.com/api/qt/stock/stocktick/get?secid=${emSecid}&fields1=f1,f2,f3,f4,f5&fields2=f6,f7,f8,f9,f10,f11,f12,f13&count=${Math.min(count, 100)}&lmt=${Math.min(count, 100)}&ut=fa5fd1943c7b386f172d6893dbbd5c2b&d=${ts}`;
+      const resp4 = await fetch(url4, { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://quote.eastmoney.com/', 'Accept': 'application/json' }, signal: AbortSignal.timeout(5000) });
+      const json4 = await resp4.json() as any;
+      const emRaw2 = Array.isArray(json4?.data?.data) ? json4.data.data :
+                     Array.isArray(json4?.data?.diff) ? json4.data.diff : [];
+      if (emRaw2.length > 0) {
+        const recs = emRaw2.map((v: any[]) => ({
+          time: (String(v[0] || '').padStart(9, '0').slice(0, 2) + ':' + String(v[0] || '').padStart(9, '0').slice(2, 4)),
+          price: (parseFloat(v[1]) || 0) > 1000 ? (parseFloat(v[1]) || 0) / 100 : (parseFloat(v[1]) || 0),
+          volume: Math.max(1, Math.round((parseInt(v[2]) || 0) / 100)),
+          amount: parseFloat(v[3]) || 0,
+          direction: v[4] === 1 ? 0 : v[4] === 2 ? 1 : 2,
+        })).filter((r: any) => r.time && r.time.length >= 4 && r.price > 0);
+        if (recs.length > 0) {
+          console.log(`[Transactions] EM backup OK ${normalized}: ${recs.length} records`);
+          this.cache.set(cacheKey, recs, 86400000);
+          return recs;
+        }
+      }
+    } catch { }
+    console.warn(`[Transactions] All EastMoney failed for ${normalized}`);
+
+    // 4. 尝试从缓存返回历史数据
+    try {
+      const cached = await this.cache.get<any[]>(cacheKey, true);
+      if (cached && cached.length > 0) {
+        console.log(`[Transactions] Returning cached ${normalized}: ${cached.length} records`);
+        return cached;
+      }
+    } catch {}
+    // 4b. 直接读取缓存文件（兜底）
+    try {
+      const cacheDir = config.cacheDir;
+      const prefix = 'trans_' + normalized + '_';
+      const readdir = (await import('fs/promises')).readdir;
+      const pathJoin = (await import('path')).join;
+      const files = await readdir(cacheDir);
+      const matchFile = files.filter((f: string) => f.startsWith(prefix) && f.endsWith('.json')).sort().reverse()[0];
+      if (matchFile) {
+        const raw = await (await import('fs/promises')).readFile(pathJoin(cacheDir, matchFile), 'utf-8');
+        const entry = JSON.parse(raw);
+        if (entry?.data?.length > 0) {
+          console.log('[Transactions] Direct cache ' + normalized + ': ' + entry.data.length + ' records from ' + matchFile);
+          return entry.data.slice(0, count);
+        }
+      }
+    } catch {}
+
+
+    // 5. 使用stock-sdk分时数据（真实分时数据，非模拟，每分钟一条）
+    try {
+      const tl = await this.getTodayTimeline(code);
+      if (tl?.data?.length > 0) {
+        let prevVol = 0;
+        const recs = tl.data
+          .filter((d: any) => d.price > 0 && d.volume > 0)
+          .map((d: any) => {
+            // 分时返回的volume是累积量，需取当前分钟的差值
+            const cumVol = d.volume || 0;
+            const delta = cumVol - prevVol;
+            prevVol = cumVol;
+            return {
+              time: d.time || '',
+              price: d.price || 0,
+              volume: Math.max(1, Math.round(delta / 100)), // 股→手
+              amount: 0,
+              direction: d.price >= (tl.preClose || 0) ? 0 : 1,
+            };
+          }).filter((r: any) => r.volume > 0);
+        if (recs.length > 0) {
+          console.log(`[Transactions] Timeline ${normalized}: ${recs.length} records`);
+          this.cache.set(cacheKey, recs, 86400000);
+          return recs;
+        }
+      }
+    } catch { }
+
+    return [];
   }
 
   /**
