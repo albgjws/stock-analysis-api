@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Card } from 'antd';
 import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
@@ -30,6 +30,7 @@ import Level5Panel from '../components/Level5Panel';
 
 import { getTransactions } from '../api/stockApi';
 import CloseRatingCard from '../components/CloseRatingCard';
+import QuantitativePanel from '../components/QuantitativePanel';
 
 interface AnalysisPageProps {
   code?: string;
@@ -535,6 +536,10 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       {/* 买卖信号回测 */}
       {hasKline && <SignalBacktestCard code={info.code} visible={hasKline} />}
+
+      {/* 量化分析 */}
+      {hasKline && <QuantitativePanel code={info.code} />}
     </div>
   );
 }
+

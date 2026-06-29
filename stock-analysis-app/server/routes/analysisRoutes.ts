@@ -370,4 +370,50 @@ router.get('/daily-report', async (_req: Request, res: Response) => {
   }
 });
 
+
+// GET /api/stock/:code/quantitative - 量化分析报告（集成数据质量/风险/微观结构/统计套利）
+router.get('/:code/quantitative', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const count = Math.min(Math.max(Number(req.query.count) || config.defaultKlineCount, 60), config.maxKlineCount);
+
+    const info = await stockDataService.getStockInfo(code);
+    const kline = await stockDataService.getKlineWithIndicators(code, {
+      count,
+      fq: 'qfq',
+      indicators: {
+        ma: { periods: [5, 10, 20, 60] },
+        macd: { fast: 12, slow: 26, signal: 9 },
+        boll: { period: 20, stdDev: 2 },
+        rsi: { period: 14 },
+        kdj: { period: 9, kPeriod: 3, dPeriod: 3 },
+      },
+    });
+
+    let intraday: any[] | undefined;
+    try {
+      const tl = await stockDataService.getTodayTimeline(code);
+      if (tl?.data) intraday = tl.data;
+    } catch {}
+
+    const { QuantitativeEngine } = await import('../services/quantitativeEngine');
+    const engine = new QuantitativeEngine();
+
+    const report = engine.analyze({
+      code,
+      kline,
+      intraday,
+      bid: (info as any).bid,
+      ask: (info as any).ask,
+      buy1Vol: (info as any).buy1Vol,
+      sell1Vol: (info as any).sell1Vol,
+    });
+
+    res.json(report);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export { router as analysisRoutes };
+
