@@ -136,8 +136,8 @@ export class StockDataService {
           }
           tencentLimitUp = parseFloat(parts[47]) || null;
           tencentLimitDown = parseFloat(parts[48]) || null;
-          tencentSell1Vol = parseInt(parts[10]) || 0;
-          tencentBuy1Vol = parseInt(parts[9]) || 0;
+          tencentSell1Vol = parseInt(parts[20]) || 0; // 卖一量
+          tencentBuy1Vol = parseInt(parts[10]) || 0;  // 买一量
           tencentMarketCap = parseFloat(parts[44]) || null; // 总市值（元）
           console.log(`[TencentRaw] ${normalized}: 换手率=${tencentTurnoverRate}% 涨停=${tencentLimitUp} 跌停=${tencentLimitDown} 卖一量=${tencentSell1Vol}手 市值=${tencentMarketCap}`);
         }
@@ -740,3 +740,4 @@ export class StockNotFoundError extends Error {
     this.name = 'StockNotFoundError';
   }
 }
+

@@ -1,4 +1,4 @@
-import type { KlineBar } from '../types';
+﻿import type { KlineBar } from '../types';
 
 // ============================================================
 // 专业指标计算 — 类似同花顺/金证付费版
@@ -609,11 +609,10 @@ export function calcLimitPrediction(
   if (info.limitUp != null && info.price >= info.limitUp - 0.01) isLimitUp = true;
   if (info.limitDown != null && info.price <= info.limitDown + 0.01) isLimitDown = true;
 
-  // 降级：没有涨跌停价时用百分比判断
-  if (!isLimitUp && !isLimitDown && !info.limitUp && !info.limitDown) {
-    const lastBar = kline[kline.length - 1];
-    const prevBar = kline.length > 1 ? kline[kline.length - 2] : null;
-    if (!lastBar || !prevBar) return null;
+  // 降级：用百分比判断（不管有没有涨跌停价，都检查一遍）
+  const lastBar = kline[kline.length - 1];
+  const prevBar = kline.length > 1 ? kline[kline.length - 2] : null;
+  if (lastBar && prevBar && !isLimitUp && !isLimitDown) {
     const klineChgPct = ((lastBar.close - prevBar.close) / prevBar.close) * 100;
     const chgPct = info.changePercent;
     const effectivePct = Math.abs(chgPct) > Math.abs(klineChgPct) * 1.5 ? klineChgPct : chgPct;
@@ -670,10 +669,10 @@ export function calcLimitPrediction(
   }
 
   // 因子3：连板位置
-  if (consecutiveCount === 1) { prob += 10; factors.push('首板，上涨空间大'); }
-  else if (consecutiveCount === 2) { prob += 5; factors.push('二板，市场关注度高'); }
-  else if (consecutiveCount === 3) { prob -= 5; factors.push('三板，分歧加大'); }
-  else { prob -= Math.min(20, consecutiveCount * 5); factors.push(`${consecutiveCount}板，高位风险加大`); }
+  if (consecutiveCount === 1) { prob += 10; factors.push(isLimitUp ? "首板，上涨空间大" : "首跌，抛压释放中"); }
+  else if (consecutiveCount === 2) { prob += 5; factors.push(isLimitUp ? "二板，市场关注度高" : "两连跌，恐慌加剧"); }
+  else if (consecutiveCount === 3) { prob -= 5; factors.push(isLimitUp ? "三板，分歧加大" : "三连跌，超卖严重"); }
+  else { prob -= Math.min(20, consecutiveCount * 5); factors.push(isLimitUp ? `${consecutiveCount}板，高位风险加大` : `${consecutiveCount}连跌，注意反转`); }
 
   // 因子4：KDJ位置（J值空间）
   const last = kline[kline.length - 1];
@@ -709,7 +708,7 @@ export function calcLimitPrediction(
   const limitPrice = isLimitUp ? (info.limitUp ?? null) : (info.limitDown ?? null);
 
   // 封单量（涨停=卖一量，跌停=买一量），单位：手
-  const blockVolume = isLimitUp ? (info.sell1Vol || 0) : (info.buy1Vol || 0);
+  const blockVolume = isLimitUp ? (info.buy1Vol || 0) : (info.sell1Vol || 0);
 
   // 封单额（元）= 封单量(手) × 100 × 涨停价
   const blockAmount = limitPrice ? blockVolume * 100 * limitPrice : 0;
@@ -891,3 +890,4 @@ export function calcAllAdvancedSignals(kline: KlineBar[]): AdvancedSignals {
     dualGoldenCross: calcDualGoldenCross(kline),
   };
 }
+
