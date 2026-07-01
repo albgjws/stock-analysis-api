@@ -662,10 +662,10 @@ export function calcLimitPrediction(
   // 因子2：流通市值（小盘股更容易连板）
   const cap = info.marketCap || 0;
   if (cap > 0) {
-    if (cap < 30) { prob += 15; factors.push('小盘股，连板弹性大'); }
-    else if (cap < 80) { prob += 8; factors.push('中盘股，有一定连板潜力'); }
+    if (cap < 30) { prob += 15; factors.push(isLimitUp ? '小盘股，连板弹性大' : '小盘股，波动剧烈'); }
+    else if (cap < 80) { prob += 8; factors.push(isLimitUp ? '中盘股，有一定连板潜力' : '中盘股，补跌风险大'); }
     else if (cap < 200) { prob += 0; }
-    else { prob -= 10; factors.push('大盘股，连板难度较大'); }
+    else { prob -= 10; factors.push(isLimitUp ? '大盘股，连板难度较大' : '大盘股，连跌空间有限'); }
   }
 
   // 因子3：连板位置
