@@ -91,20 +91,20 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           coord: [maxIdx, maxPriceVal],
           label: {
             formatter: `最高 ${maxPct >= 0 ? '+' : ''}${maxPct.toFixed(2)}%`,
-            color: '#cf1322',
+            color: maxPct > 0 ? '#cf1322' : maxPct < 0 ? '#3cb371' : '#999',
             fontSize: 12,
             fontWeight: 'bold',
             position: maxIdx < prices.length / 2 ? 'right' : 'left',
             distance: 20,
             backgroundColor: 'rgba(255,255,255,0.92)',
-            borderColor: '#cf1322',
+            borderColor: maxPct > 0 ? '#cf1322' : maxPct < 0 ? '#3cb371' : '#999',
             borderWidth: 1,
             padding: [2, 8],
             borderRadius: 4,
           },
           symbol: 'pin',
           symbolSize: 24,
-          itemStyle: { color: '#cf1322' },
+          itemStyle: { color: maxPct > 0 ? '#cf1322' : maxPct < 0 ? '#3cb371' : '#999' },
         });
       }
       // 最低点百分比（右下角）
@@ -114,20 +114,20 @@ export default function IntradayChart({ data, loading, signals, lastRefresh }: I
           coord: [minIdx, minPriceVal],
           label: {
             formatter: `最低 ${minPct >= 0 ? '+' : ''}${minPct.toFixed(2)}%`,
-            color: '#3cb371',
+            color: minPct > 0 ? '#cf1322' : minPct < 0 ? '#3cb371' : '#999',
             fontSize: 12,
             fontWeight: 'bold',
             position: minIdx < prices.length / 2 ? 'right' : 'left',
             distance: 20,
             backgroundColor: 'rgba(255,255,255,0.92)',
-            borderColor: '#3cb371',
+            borderColor: minPct > 0 ? '#cf1322' : minPct < 0 ? '#3cb371' : '#999',
             borderWidth: 1,
             padding: [2, 8],
             borderRadius: 4,
           },
           symbol: 'pin',
           symbolSize: 24,
-          itemStyle: { color: '#3cb371' },
+          itemStyle: { color: minPct > 0 ? '#cf1322' : minPct < 0 ? '#3cb371' : '#999' },
         });
       }
     }
