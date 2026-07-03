@@ -49,7 +49,33 @@
         <view><text class="ov-lbl">换手率</text><text class="ov-val" style="color:#999;">{{trText}}</text></view>
       </view>
     </view>
-
+    <!-- ===== 个股资料（行业/概念板块） ===== -->
+    <view wx:if="{{profile}}" class="card" style="padding:10px 12px;">
+      <view style="display:flex;flex-direction:column;gap:8rpx;">
+        <view wx:if="{{profileIndustry}}" style="display:flex;align-items:center;gap:8rpx;">
+          <text style="font-size:11px;color:#999;">📂 所属行业</text>
+          <text style="font-size:12px;padding:2rpx 12rpx;border-radius:4rpx;background:#e6f4ff;color:#1677ff;font-weight:500;">{{profileIndustry}}</text>
+        </view>
+        <view wx:if="{{profileRegion}}" style="display:flex;align-items:center;gap:8rpx;">
+          <text style="font-size:11px;color:#999;">📍 所属地域</text>
+          <text style="font-size:12px;padding:2rpx 12rpx;border-radius:4rpx;background:#f0f5ff;color:#1d39c4;">{{profileRegion}}</text>
+        </view>
+        <view wx:if="{{profileConcepts.length>0}}">
+          <text style="font-size:11px;color:#999;display:block;margin-bottom:4rpx;">🏷️ 概念板块（{{profileConcepts.length}}）</text>
+          <view style="display:flex;flex-wrap:wrap;gap:4rpx;">
+            <view wx:for="{{profileConcepts}}" wx:key="code" style="font-size:10px;padding:2rpx 8rpx;border-radius:3rpx;background:#f6ffed;border:1px solid #b7eb8f;color:#389e0d;margin:2rpx;">
+              {{item.name}}
+            </view>
+          </view>
+        </view>
+        <view style="display:grid;grid-template-columns:1fr 1fr;gap:4rpx 16rpx;border-top:1px solid #f0f0f0;padding-top:8rpx;margin-top:4rpx;">
+          <view wx:if="{{profile.pe!=null}}"><text style="font-size:10px;color:#999;">市盈率(动)</text><text style="font-size:13px;font-weight:600;display:block;">{{profile.pe}}</text></view>
+          <view wx:if="{{profile.pb!=null}}"><text style="font-size:10px;color:#999;">市净率</text><text style="font-size:13px;font-weight:600;display:block;">{{profile.pb}}</text></view>
+          <view wx:if="{{profile.marketCap!=null}}"><text style="font-size:10px;color:#999;">总市值</text><text style="font-size:13px;font-weight:600;display:block;">{{profile.marketCap}}亿</text></view>
+          <view wx:if="{{profile.circulatingMarketCap!=null}}"><text style="font-size:10px;color:#999;">流通市值</text><text style="font-size:13px;font-weight:600;display:block;">{{profile.circulatingMarketCap}}亿</text></view>
+        </view>
+      </view>
+    </view>
     <!-- ===== ② 建仓建议 ===== -->
     <view wx:if="{{sig}}" class="card">
       <view class="rw">
@@ -386,3 +412,4 @@
     </view>
   </view>
 </view>
+

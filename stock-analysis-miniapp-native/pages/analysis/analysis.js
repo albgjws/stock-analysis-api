@@ -38,6 +38,7 @@ Page({
 
     buyVal:'',diag:null,diagScoreCls:'',diagProbCls:'',diagProbTxt:'',diagSlText:'',diagTpText:'',
     txExpanded:false,txData:[],
+    profile:null,profileIndustry:'',profileRegion:'',profileConcepts:[],
   },
 
   onLoad(o){
@@ -53,14 +54,18 @@ Page({
     this.setData({loading:1,error:''});var me=this;
     Promise.all([
       API.getAnalysis(c),API.getIntraday(c).catch(function(){return null}),
-      API.getFundFlow(c).catch(function(){return[]}),API.getBacktest(c).catch(function(){return null}),
-    ]).then(function(r){me.process(r[0],r[1],r[3],r[2])})
+      API.getFundFlow(c).catch(function(){return[]}),API.getBacktest(c).catch(function(){return null}),API.getStockProfile(c).catch(function(){return null}),
+    ]).then(function(r){me.process(r[0],r[1],r[3],r[2],r[4])})
     .catch(function(e){me.setData({error:e.message||'加载失败',loading:0})});
   },
 
-  process(a,id,bt,ff){
+  process(a,id,bt,ff,profile){
     var info=a.info||{},sig=a.signals||{},kl=a.kline||[],pred=a.prediction||{};
     if(!ff)ff=a.fundFlow||[];
+    // 个股资料
+    if(profile&&(profile.industry||profile.concepts&&profile.concepts.length>0)){
+      me.setData({profile:profile,profileIndustry:profile.industry||'',profileRegion:profile.region||'',profileConcepts:profile.concepts||[]});
+    }
     var hk=kl.length>0,ch=info.change||0,cc=ch>0?'up':ch<0?'down':'neutral';
     var mk=(info.market||'').toLowerCase();
     var ss=sig.strength||0,ssc=ss>0?'up':ss<0?'down':'neutral';
@@ -494,3 +499,8 @@ Page({
     });
   },
 });
+
+
+
+
+

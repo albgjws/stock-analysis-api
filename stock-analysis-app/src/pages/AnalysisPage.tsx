@@ -1,11 +1,11 @@
-﻿import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Space, Tag, Card } from 'antd';
 import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { useStockAnalysis } from '../hooks/useStockData';
 import { useTabContext } from '../context/TabContext';
 import { usePolling } from '../hooks/usePolling';
-import { getIntraday, getFundFlow, getQuote } from '../api/stockApi';
+import { getIntraday, getFundFlow, getQuote, getStockProfile } from '../api/stockApi';
 import { LoadingSpinner, ErrorState, EmptyState } from '../components/Loading';
 import SearchBar from '../components/SearchBar';
 import StockOverview from '../components/StockOverview';
@@ -27,6 +27,7 @@ import type { MarketRecapResult } from '../utils/marketRecap';
 import type { AdvancedSignals, LimitPrediction as LimitPredictionResult, CloseRating as CloseRatingResult } from '../utils/advancedIndicators';
 import LimitPredictionBanner from '../components/LimitPredictionBanner';
 import Level5Panel from '../components/Level5Panel';
+// import StockProfilePanel from '../components/StockProfilePanel';
 
 
 import CloseRatingCard from '../components/CloseRatingCard';
@@ -58,6 +59,10 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   
 
 
+  // 个股资料（行业/概念板块等）
+  const [stockProfile, setStockProfile] = useState<any>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
   // 实时行情（用于更新涨跌幅）
   const [liveQuote, setLiveQuote] = useState<any>(null);
 
@@ -85,6 +90,14 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     }
   }, [code]);
 
+  const fetchStockProfile = useCallback(async () => {
+    if (!code) return;
+    try {
+      const data = await getStockProfile(code);
+      setStockProfile(data);
+    } catch {}
+  }, [code]);
+
   const fetchQuote = useCallback(async () => {
     if (!code) return;
     try {
@@ -102,8 +115,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     fetchQuote();
     fetchIntraday();
     fetchFundFlow();
+    fetchStockProfile();
 
-  }, [retry, fetchQuote, fetchIntraday, fetchFundFlow]);
+  }, [retry, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile]);
 
   // 首次加载
   useEffect(() => {
@@ -113,7 +127,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     Promise.all([
       getIntraday(code).then(setIntraday).catch(() => null),
       getFundFlow(code, 60).then(setFundFlow).catch(() => null),
-      getQuote(code).then(setLiveQuote).catch(() => null),
+      getStockProfile(code).then(setStockProfile).catch(() => null),
 
     ]).finally(() => {
       setIntradayLoading(false);
@@ -151,7 +165,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [code, fetchQuote, fetchIntraday, fetchFundFlow]);
+  }, [code, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile]);
 
   // 午盘收盘（11:30）自动刷新一次
   useEffect(() => {
@@ -177,7 +191,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [code, fetchQuote, fetchIntraday, fetchFundFlow]);
+  }, [code, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile]);
 
   // 合并实时行情数据（用于价格/涨跌幅实时更新）
   // 注意：必须放在所有早期 return 之前（React Hook 规则不能条件性调用）
@@ -355,7 +369,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       )}
 
       {/* 股票概览 */}
-      <StockOverview info={liveInfo} />
+      <StockOverview info={liveInfo} profile={stockProfile} />
 
       {/* 分时图 + 五档盘口 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -377,6 +391,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
           />
         </div>
+        {/* Profile data integrated into StockOverview above */}
       </div>
 
       {/* K线图 — 仅当有K线数据时显示 */}
@@ -533,4 +548,5 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     </div>
   );
 }
+
 

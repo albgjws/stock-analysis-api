@@ -415,5 +415,37 @@ router.get('/:code/quantitative', async (req: Request, res: Response, next: Next
   }
 });
 
+
+
+// GET /api/stock/:code/profile — 个股资料（行业板块、概念板块、地域等）
+router.get('/:code/profile', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const profile = await stockDataService.getStockProfile(code);
+    res.json(profile);
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+// GET /api/stock/:code/profile-debug — 东方财富原始响应调试
+router.get('/:code/profile-debug', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const normalized = code.startsWith('sh') || code.startsWith('sz') ? code : 
+      code.startsWith('6') ? 'sh' + code : 'sz' + code;
+    const emMarket = normalized.startsWith('sh') ? '1' : '0';
+    const emCode = normalized.replace(/^(sh|sz|bj)/, '');
+    const secId = emMarket + '.' + emCode;
+    const fields = 'f57,f58,f84,f85,f86,f87,f116,f117,f120,f121,f122,f123,f124,f125,f126,f127,f128,f129,f130,f131,f132,f133,f134,f135,f140,f141,f142,f143,f144,f145,f146,f147,f148,f149,f150,f151,f152,f153,f162,f167,f168,f169';
+    const url = 'https://push2.eastmoney.com/api/qt/stock/get?secid=' + secId + '&fields=' + fields + '&invt=2&fltt=2';
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://quote.eastmoney.com/' } });
+    const json = await resp.json();
+    res.json(json);
+  } catch (err) {
+    res.json({ error: String(err) });
+  }
+});
 export { router as analysisRoutes };
 

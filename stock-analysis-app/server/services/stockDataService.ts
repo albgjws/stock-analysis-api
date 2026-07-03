@@ -1,6 +1,8 @@
 ﻿import { StockSDK } from 'stock-sdk';
 import { CacheService } from './cacheService';
 import { config } from '../config';
+import fs from 'fs';
+import path from 'path';
 import type { SearchResultItem, StockInfo, KlineBar } from '../types';
 
 export class StockDataService {
@@ -34,7 +36,7 @@ export class StockDataService {
             name: r.name,
             market: prefix,
             type: r.type,
-          };
+          }
         });
     } catch (err) {
       console.error('[StockData] Search failed:', err);
@@ -322,7 +324,7 @@ export class StockDataService {
               amount: parseFloat(bar[6]) || 0,
               changePercent: undefined,
               change: undefined,
-            };
+            }
           }).filter(Boolean);
           console.log("[TencentKline] Got " + kline.length + " bars for " + normalized);
         }
@@ -572,7 +574,7 @@ export class StockDataService {
               volume: Math.max(1, vol),
               amount: parseFloat(v[3]) || 0,
               direction: v[4] === 1 ? 0 : v[4] === 2 ? 1 : 2,
-            };
+            }
           }).filter((r: any) => r.time && r.time.length >= 4 && r.price > 0);
           if (recs.length > 0) {
             console.log(`[Transactions] EastMoney OK ${normalized}: ${recs.length} records`);
@@ -654,7 +656,7 @@ export class StockDataService {
               volume: Math.max(1, Math.round(delta / 100)), // 股→手
               amount: 0,
               direction: d.price >= (tl.preClose || 0) ? 0 : 1,
-            };
+            }
           }).filter((r: any) => r.volume > 0);
         if (recs.length > 0) {
           console.log(`[Transactions] Timeline ${normalized}: ${recs.length} records`);
@@ -711,6 +713,151 @@ export class StockDataService {
     return `${prefix}${codeNum}`;
   }
 
+  /**
+   * Get stock profile including industry, concept sectors, and basic financial info
+   * Uses Eastmoney push2 API for concept/industry data
+   */
+  async getStockProfile(code: string): Promise<{
+    industry: string;
+    concepts: { name: string; code: string }[];
+    region: string;
+    pe: number | null;
+    pb: number | null;
+    marketCap: number | null;
+    circulatingMarketCap: number | null;
+    high52w: number | null;
+    low52w: number | null;
+  }> {
+    const cacheKey = 'profile_' + code;
+    const cached = await this.cache.get<any>(cacheKey);
+    if (cached) return cached;
+
+    const normalized = this.normalizeCode(code);
+    const result: any = {
+      industry: '', concepts: [], region: '',
+      pe: null, pb: null, marketCap: null,
+      circulatingMarketCap: null, high52w: null, low52w: null,
+    };
+
+    // Get financial data from Tencent via stock-sdk (reliable)
+    try {
+      const quotes = await this.sdk.getFullQuotes([normalized]);
+      if (quotes && quotes.length > 0) {
+        const q = quotes[0];
+        result.pe = q.pe || null;
+        result.pb = q.pb || null;
+        // FullQuote returns marketCap in 亿 (hundreds of millions), store as 元
+        result.marketCap = q.totalMarketCap != null ? q.totalMarketCap * 100000000 : null;
+        result.circulatingMarketCap = q.circulatingMarketCap != null ? q.circulatingMarketCap * 100000000 : null;
+        result.high52w = q.high52w || null;
+        result.low52w = q.low52w || null;
+      }
+    } catch (e: any) {
+      console.warn('[StockProfile] getFullQuotes failed:', e.message);
+    }
+
+    // Try Eastmoney F10 CompanySurvey for industry/region (reliable)
+    try {
+      const emCode = normalized.replace(/^(sh|sz|bj)/, '').toUpperCase();
+      const emMarket = normalized.startsWith('sh') ? 'SH' : 'SZ';
+      const url = `https://emweb.securities.eastmoney.com/PC_HSF10/CompanySurvey/CompanySurveyAjax?code=${emMarket}${emCode}`;
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://emweb.securities.eastmoney.com/', 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(8000)
+      });
+      const json = await resp.json() as any;
+      if (json?.jbzl) {
+        result.industry = json.jbzl.sshy || '';
+        result.region = json.jbzl.qy || '';
+        // Concept board data from push2 API or static mapping below
+      }
+    } catch (e: any) {
+      console.warn('[StockProfile] CompanySurvey unavailable:', e.message);
+    }
+
+    // Try Eastmoney push2 for concept/industry data (may fail on some networks)
+    try {
+      const emMarket = normalized.startsWith('sh') ? '1' : '0';
+      const emCode = normalized.replace(/^(sh|sz|bj)/, '');
+      const secId = emMarket + '.' + emCode;
+      const fields = 'f57,f58,f85,f86,f116,f117,f121,f122,f124,f162,f167,f168,f169';
+      const url = 'https://push2.eastmoney.com/api/qt/stock/get?secid=' + secId + '&fields=' + fields + '&invt=2&fltt=2';
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://quote.eastmoney.com/' },
+        signal: AbortSignal.timeout(5000)
+      });
+      const json = await resp.json() as any;
+      const data = json?.data || json?.Result;
+      if (data) {
+        result.industry = data.f86 || data.f85 || '';
+        result.region = data.f124 || '';
+        if (data.f121) {
+          const names = String(data.f121).split(',');
+          const codes = data.f122 ? String(data.f122).split(',') : [];
+          for (let i = 0; i < names.length; i++) {
+            const n = names[i].trim();
+            if (n && /[\u4e00-\u9fa5]/.test(n)) {
+              result.concepts.push({ name: n, code: codes[i]?.trim() || '' });
+            }
+          }
+        }
+      }
+    } catch (e: any) {
+      // Eastmoney API unavailable, that's OK - we still have financial data
+      console.warn('[StockProfile] Eastmoney unavailable:', e.message);
+    }
+
+    // Fallback: if no concepts from API, load from static mapping
+    if (result.concepts.length === 0) {
+      try {
+        const conceptPath = path.resolve(process.cwd(), 'data/stock_concepts.json');
+        if (fs.existsSync(conceptPath)) {
+          const mapping = JSON.parse(fs.readFileSync(conceptPath, 'utf-8'));
+          const cleanCode = code.replace(/^(sh|sz|bj|hk)/, '');
+          const stockConcepts = mapping[cleanCode];
+          if (stockConcepts && Array.isArray(stockConcepts)) {
+            for (const c of stockConcepts) {
+              if (!result.concepts.some((x: any) => x.name === c)) {
+                result.concepts.push({ name: c, code: '' });
+              }
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[StockProfile] static concepts unavailable:', e.message);
+      }
+    }
+
+    // Fallback: if still no industry, try datacenter API
+    if (result.concepts.length === 0) {
+      try {
+        const emCode2 = normalized.replace(/^(sh|sz|bj)/, '').toUpperCase();
+        const url2 = 'https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_LICO_FN_CPD&columns=SECURITY_CODE,BOARD_NAME,BOARD_CODE&filter=(SECURITY_CODE=%22' + emCode2 + '%22)&pageNumber=1&pageSize=5&sortTypes=&sortColumns=&source=HSF10&client=PC';
+        const resp2 = await fetch(url2, {
+          headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://emweb.securities.eastmoney.com/' },
+          signal: AbortSignal.timeout(5000)
+        });
+        const json2 = await resp2.json() as any;
+        if (json2?.result?.data && json2.result.data.length > 0) {
+          for (const row of json2.result.data) {
+            const boardName = row.BOARD_NAME || '';
+            if (boardName && !result.industry) {
+              result.industry = boardName;
+            }
+            if (boardName && boardName !== result.industry && !result.concepts.some((x: any) => x.name === boardName)) {
+              result.concepts.push({ name: boardName, code: row.BOARD_CODE || '' });
+            }
+          }
+        }
+      } catch (e: any) {
+        console.warn('[StockProfile] datacenter fallback unavailable:', e.message);
+      }
+    }
+
+    await this.cache.set(cacheKey, result, 3600000);
+    return result;
+  }
+
   private getMarketPrefix(code: string): string {
     // 港股代码通常为5位数字
     if (code.length <= 5 && /^\d{1,5}$/.test(code)) return 'hk';
@@ -733,6 +880,9 @@ export class StockDataService {
     ).slice(0, 20);
   }
 }
+
+
+
 
 export class StockNotFoundError extends Error {
   constructor(code: string) {
