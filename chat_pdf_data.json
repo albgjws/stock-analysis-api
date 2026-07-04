@@ -1,0 +1,438 @@
+{
+  "sections": [
+    {
+      "tag": "1. 会话概览 / Session Overview",
+      "h1": "1. 会话概览 / Session Overview",
+      "paragraphs": [
+        "本次会话是对 <b>股票分析工具</b> 项目的全面技术探讨与代码开发。项目包含 PC 端 React 网页应用和微信小程序两个前端，共享同一 Node.js/Express 后端服务。",
+        "会话主要涵盖：项目整体架构分析、后端服务理解、前端组件体系、数据流设计、视觉规范、以及开发工作流指南。同时生成了此 PDF 文档作为对话记录存档。"
+      ]
+    },
+    {
+      "tag": "2. 系统上下文 / System Context",
+      "h1": "2. 系统上下文 / System Context",
+      "h2": "2.1 用户信息",
+      "bullets": [
+        "用户: <font color=\"#cf1322\">ryan</font> (253840533@qq.com)",
+        "服务器: 阿里云 47.97.6.167",
+        "本地端口: 服务端 3003，客户端 5174",
+        "当前日期: 2026-07-02"
+      ]
+    },
+    {
+      "h2": "2.2 项目目录结构",
+      "code": "F:\\ai炒股训练\\\n├── stock-analysis-app/          # PC 端 React 应用\n├── stock-analysis-miniapp-native/  # 微信小程序\n├── AGENTS.md                    # Codex 工作指令\n└── stock_analysis.db            # SQLite 数据库"
+    },
+    {
+      "tag": "3. 项目架构 / Project Architecture",
+      "h1": "3. 项目架构 / Project Architecture",
+      "paragraphs": [
+        "项目采用经典的前后端分离架构，后端 Express 提供 RESTful API，前端 React 负责 UI 渲染和数据可视化。"
+      ],
+      "code": "┌──────────────────┐    ┌──────────────────┐\n│  PC Web (React)  │    │  微信小程序      │\n│  localhost:5174  │    │  (原生 WXML/WXSS) │\n└────────┬─────────┘    └────────┬─────────┘\n         │   HTTP/HTTPS         │\n         └──────────┬───────────┘\n                    │\n         ┌──────────v───────────┐\n         │  /api/stock/* (Express)\n         │  Port 3003            │\n         └─────┬────┬────┬──────┘\n               │    │    │\n         ┌─────v┐ ┌v───┐ ┌v────┐\n         │stock │ │腾讯│ │新浪│\n         │sdk   │ │API │ │API │\n         └──────┘ └────┘ └─────┘"
+    },
+    {
+      "tag": "4. 技术栈 / Technology Stack",
+      "h1": "4. 技术栈 / Technology Stack",
+      "table": {
+        "data": [
+          [
+            "层级",
+            "技术",
+            "版本/说明"
+          ],
+          [
+            "前端框架",
+            "React 18 + TypeScript",
+            "函数组件 + Hooks"
+          ],
+          [
+            "路由",
+            "react-router-dom",
+            "v6"
+          ],
+          [
+            "UI 组件库",
+            "Ant Design",
+            "v5，中文"
+          ],
+          [
+            "图表",
+            "ECharts 5",
+            "K线/分时/指标"
+          ],
+          [
+            "构建工具",
+            "Vite",
+            "v5，HMR"
+          ],
+          [
+            "后端框架",
+            "Express 4 + tsx",
+            "热重载"
+          ],
+          [
+            "股票数据",
+            "stock-sdk",
+            "v1.10"
+          ],
+          [
+            "预测算法",
+            "ARIMA",
+            "时间序列预测"
+          ]
+        ],
+        "widths_cm": [
+          3.5,
+          5,
+          7
+        ],
+        "fontSize": 8
+      }
+    },
+    {
+      "tag": "5. 后端路由与核心服务",
+      "h1": "5. 后端路由与核心服务 / Backend Routes",
+      "h2": "5.1 完整路由列表",
+      "table": {
+        "data": [
+          [
+            "路由",
+            "功能",
+            "参数"
+          ],
+          [
+            "/:code/analysis",
+            "完整分析",
+            "count=200"
+          ],
+          [
+            "/:code/intraday",
+            "分时数据",
+            "15秒轮询"
+          ],
+          [
+            "/:code/quote",
+            "实时行情",
+            "5秒轮询"
+          ],
+          [
+            "/:code/fund-flow",
+            "资金流向",
+            "60秒轮询"
+          ],
+          [
+            "/:code/transactions",
+            "逐笔成交",
+            "count=100"
+          ],
+          [
+            "/:code/backtest",
+            "预测回测",
+            "—"
+          ],
+          [
+            "/:code/quantitative",
+            "量化分析",
+            "—"
+          ],
+          [
+            "/search",
+            "股票搜索",
+            "q="
+          ],
+          [
+            "/indices",
+            "大盘指数",
+            "—"
+          ]
+        ],
+        "widths_cm": [
+          5,
+          4,
+          7
+        ],
+        "fontSize": 8
+      }
+    },
+    {
+      "h2": "5.2 核心服务",
+      "table": {
+        "data": [
+          [
+            "服务文件",
+            "功能说明"
+          ],
+          [
+            "stockDataService.ts",
+            "搜索/行情/K线/资金流向"
+          ],
+          [
+            "predictionService.ts",
+            "ARIMA预测"
+          ],
+          [
+            "signalService.ts",
+            "多指标加权评分"
+          ],
+          [
+            "cacheService.ts",
+            "node-cache + JSON"
+          ],
+          [
+            "quantitativeEngine.ts",
+            "量化分析引擎"
+          ]
+        ],
+        "widths_cm": [
+          5,
+          11
+        ],
+        "fontSize": 8
+      }
+    },
+    {
+      "h2": "5.3 缓存策略",
+      "bullets": [
+        "CacheService 写入 data/*.json，TTL可配置",
+        "分析结果缓存1小时",
+        "内存缓存 (node-cache): 300秒"
+      ]
+    },
+    {
+      "pageBreak": true,
+      "tag": "6. 前端组件",
+      "h1": "6. 前端组件 / Frontend Components",
+      "h2": "6.1 页面",
+      "bullets": [
+        "<b>首页</b> (HomePage.tsx): 搜索栏 + 功能卡片",
+        "<b>分析页</b> (AnalysisPage.tsx): 核心业务页"
+      ]
+    },
+    {
+      "h2": "6.2 组件列表",
+      "table": {
+        "data": [
+          [
+            "组件",
+            "数据来源",
+            "功能"
+          ],
+          [
+            "StockOverview",
+            "liveInfo",
+            "实时价格/涨跌幅"
+          ],
+          [
+            "IntradayChart",
+            "/intraday",
+            "分时折线图"
+          ],
+          [
+            "Level5Panel",
+            "/quote",
+            "五档盘口"
+          ],
+          [
+            "KlineChart",
+            "/analysis",
+            "K线+MA/布林带"
+          ],
+          [
+            "IndicatorCharts",
+            "/analysis",
+            "MACD+RSI+KDJ"
+          ],
+          [
+            "PredictionChart",
+            "/analysis",
+            "ARIMA预测"
+          ],
+          [
+            "SignalPanel",
+            "/analysis",
+            "综合信号"
+          ],
+          [
+            "MarketRecap",
+            "/analysis",
+            "文字复盘"
+          ],
+          [
+            "LimitPredictionBanner",
+            "analysis+quote",
+            "涨停/跌停预测"
+          ],
+          [
+            "CloseRatingCard",
+            "/analysis",
+            "收盘评分"
+          ],
+          [
+            "QuantitativePanel",
+            "/quantitative",
+            "量化分析"
+          ]
+        ],
+        "widths_cm": [
+          3.5,
+          3,
+          10
+        ],
+        "fontSize": 8
+      }
+    },
+    {
+      "h2": "6.3 分析页组件布局",
+      "code": "1. StockOverview\n2. 分时图 + Level5Panel（并排）\n3. AdvancedSignalLegend\n4. IntradayChart\n5. KlineChart\n6. IndicatorCharts\n7. LimitPredictionBanner\n8. MarketRecap\n9. CloseRatingCard\n10. PredictionChart\n11. BacktestReport\n12. PurchaseAnalysis\n13. SignalPanel\n14. SignalBacktestCard\n15. QuantitativePanel"
+    },
+    {
+      "h2": "6.4 轮询机制",
+      "table": {
+        "data": [
+          [
+            "数据",
+            "间隔",
+            "条件"
+          ],
+          [
+            "实时行情",
+            "5秒",
+            "交易时段+可见"
+          ],
+          [
+            "分时数据",
+            "15秒",
+            "交易时段+可见"
+          ],
+          [
+            "资金流向",
+            "60秒",
+            "交易时段+可见"
+          ],
+          [
+            "大盘指数",
+            "30秒",
+            "交易时段+可见"
+          ]
+        ],
+        "widths_cm": [
+          5,
+          3,
+          8
+        ],
+        "fontSize": 8
+      }
+    },
+    {
+      "pageBreak": true,
+      "tag": "7. 视觉规范",
+      "h1": "7. 视觉规范 / Visual Guidelines",
+      "h2": "7.1 颜色规则",
+      "table": {
+        "data": [
+          [
+            "场景",
+            "颜色",
+            "色值"
+          ],
+          [
+            "上涨 (change > 0)",
+            "红色",
+            "#cf1322"
+          ],
+          [
+            "下跌 (change < 0)",
+            "绿色",
+            "#3cb371"
+          ],
+          [
+            "不涨不跌 (change = 0)",
+            "灰色",
+            "#999"
+          ],
+          [
+            "实时状态",
+            "绿点",
+            "#52c41a"
+          ],
+          [
+            "蓝色强调",
+            "蓝色",
+            "#1677ff"
+          ]
+        ],
+        "widths_cm": [
+          5,
+          3,
+          3
+        ],
+        "fontSize": 8
+      }
+    },
+    {
+      "h2": "7.2 涨跌停 Banner",
+      "bullets": [
+        "涨停：红色系渐变 #fff2f0 → #fff7e6",
+        "跌停：绿色系渐变 #f6ffed → #e6fffb"
+      ]
+    },
+    {
+      "tag": "8. 关键业务逻辑",
+      "h1": "8. 关键业务逻辑 / Business Logic",
+      "h2": "8.1 股票代码标准化",
+      "code": "600XXX -> sh600XXX（上海主板）\n000XXX/001XXX -> sz000XXX（深圳）\n300XXX -> sz300XXX（创业板）\n688XXX -> sh688XXX（科创板）\n8XXXXX -> bj8XXXXX（北交所）"
+    },
+    {
+      "h2": "8.2 涨跌停检测",
+      "bullets": [
+        "优先使用接口返回的涨跌停价",
+        "降级: 涨幅>=9.6% 为涨停，跌幅<=-9.6%为跌停",
+        "两个条件独立判断"
+      ]
+    },
+    {
+      "h2": "8.3 封单量逻辑",
+      "bullets": [
+        "涨停封单 = 买一量 (buy1Vol)",
+        "跌停封单 = 卖一量 (sell1Vol)",
+        "封单额 = 封单量(手) x 100 x 涨跌停价"
+      ]
+    },
+    {
+      "pageBreak": true,
+      "tag": "9. Codex 工作规则",
+      "h1": "9. Codex 工作规则 / Codex Work Rules",
+      "h2": "9.1 修改要求",
+      "bullets": [
+        "API 改动必须同步到 PC 和小程序两端",
+        "每次修改需同时更新两端"
+      ]
+    },
+    {
+      "h2": "9.2 状态覆盖",
+      "bullets": [
+        "<font color=\"#1677ff\">1. 加载中</font> - LoadingSpinner",
+        "<font color=\"#cf1322\">2. 错误</font> - ErrorState",
+        "<font color=\"#999\">3. 空数据</font> - EmptyState",
+        "<font color=\"#3cb371\">4. 正常数据</font>"
+      ]
+    },
+    {
+      "h2": "9.3 Ant Design v5",
+      "bullets": [
+        "使用 styles={{ body: {...} }} 替代 bodyStyle",
+        "使用 Col xs={24} sm={12} md={8} lg={6}"
+      ]
+    },
+    {
+      "h2": "9.4 部署相关",
+      "bullets": [
+        "线上服务器：47.97.6.167（阿里云）",
+        "生产构建: npm run build",
+        "生产启动: npm start",
+        "重启: pkill -f tsx → nohup npx tsx server/index.ts &"
+      ]
+    }
+  ]
+}
