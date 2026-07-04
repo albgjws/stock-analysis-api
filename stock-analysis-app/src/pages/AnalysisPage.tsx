@@ -384,7 +384,6 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       {/* 股票概览 */}
       <StockOverview info={liveInfo} profile={stockProfile} />
-      <ValueQualityCard data={valueQuality} loading={valueQualityLoading} />
 
       {/* 分时图 + 五档盘口 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -408,6 +407,8 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
         </div>
         {/* Profile data integrated into StockOverview above */}
       </div>
+
+      <ValueQualityCard data={valueQuality} loading={valueQualityLoading} />
 
       {/* K线图 — 仅当有K线数据时显示 */}
       {hasKline ? (
