@@ -5,7 +5,7 @@ import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { useStockAnalysis } from '../hooks/useStockData';
 import { useTabContext } from '../context/TabContext';
 import { usePolling } from '../hooks/usePolling';
-import { getIntraday, getFundFlow, getQuote, getStockProfile } from '../api/stockApi';
+import { getIntraday, getFundFlow, getQuote, getStockProfile, getValueQuality } from '../api/stockApi';
 import { LoadingSpinner, ErrorState, EmptyState } from '../components/Loading';
 import SearchBar from '../components/SearchBar';
 import StockOverview from '../components/StockOverview';
@@ -18,6 +18,7 @@ import PurchaseAnalysis from '../components/PurchaseAnalysis';
 import MarketRecap from '../components/MarketRecap';
 import AdvancedSignalLegend from '../components/AdvancedSignalLegend';
 import PositionAdvice from '../components/PositionAdvice';
+import ValueQualityCard from '../components/ValueQualityCard';
 import BacktestReport from '../components/BacktestReport';
 import PredictionComparisonChart from '../components/PredictionComparisonChart';
 import SignalBacktestCard from '../components/SignalBacktestCard';
@@ -61,6 +62,8 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
   // 个股资料（行业/概念板块等）
   const [stockProfile, setStockProfile] = useState<any>(null);
+  const [valueQuality, setValueQuality] = useState<any>(null);
+  const [valueQualityLoading, setValueQualityLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
 
   // 实时行情（用于更新涨跌幅）
@@ -89,6 +92,15 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       // 静默失败
     }
   }, [code]);
+  const fetchValueQuality = useCallback(async () => {
+    if (!code) return;
+    setValueQualityLoading(true);
+    try {
+      const data = await getValueQuality(code);
+      setValueQuality(data);
+    } catch {}
+    setValueQualityLoading(false);
+  }, [code]);
 
   const fetchStockProfile = useCallback(async () => {
     if (!code) return;
@@ -116,8 +128,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     fetchIntraday();
     fetchFundFlow();
     fetchStockProfile();
+    fetchValueQuality();
 
-  }, [retry, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile]);
+  }, [retry, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile, fetchValueQuality]);
 
   // 首次加载
   useEffect(() => {
@@ -128,6 +141,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       getIntraday(code).then(setIntraday).catch(() => null),
       getFundFlow(code, 60).then(setFundFlow).catch(() => null),
       getStockProfile(code).then(setStockProfile).catch(() => null),
+      getValueQuality(code).then(setValueQuality).catch(() => null),
 
     ]).finally(() => {
       setIntradayLoading(false);
@@ -370,6 +384,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       {/* 股票概览 */}
       <StockOverview info={liveInfo} profile={stockProfile} />
+      <ValueQualityCard data={valueQuality} loading={valueQualityLoading} />
 
       {/* 分时图 + 五档盘口 */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>

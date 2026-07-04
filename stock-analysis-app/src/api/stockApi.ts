@@ -119,4 +119,11 @@ export async function getStockProfile(code: string): Promise<any> {
   return res.json();
 }
 
+export async function getValueQuality(code: string): Promise<any> {
+  const url = BASE_URL + '/' + encodeURIComponent(code) + '/value-quality';
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  return res.json();
+}
+
 export { ApiError, NotFoundError };

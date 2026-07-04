@@ -9,6 +9,7 @@ import { CacheService } from '../services/cacheService';
 import { PredictionHistoryService } from '../services/predictionHistoryService';
 import { PredictionCorrectionService } from '../services/predictionCorrectionService';
 import { SignalBacktestService } from '../services/signalBacktestService';
+import { ValueQualityService } from '../services/valueQualityService';
 import { config } from '../config';
 import type { PredictionResult, SignalResult } from '../types';
 
@@ -21,6 +22,7 @@ const cache = new CacheService();
 const predHistoryService = new PredictionHistoryService();
 const correctionService = new PredictionCorrectionService();
 const signalBacktestService = new SignalBacktestService();
+const valueQualityService = new ValueQualityService();
 
 // GET /api/stock/:code/intraday — 当日分时图数据
 router.get('/:code/intraday', async (req: Request, res: Response, next: NextFunction) => {
@@ -428,6 +430,18 @@ router.get('/:code/profile', async (req: Request, res: Response, next: NextFunct
   }
 });
 
+
+
+// GET /api/stock/:code/value-quality — AI Berkshire 价值质量评估
+router.get('/:code/value-quality', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const result = await valueQualityService.assess(code);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
 
 // GET /api/stock/:code/profile-debug — 东方财富原始响应调试
 router.get('/:code/profile-debug', async (req: Request, res: Response, next: NextFunction) => {
