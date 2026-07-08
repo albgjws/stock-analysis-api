@@ -71,6 +71,8 @@ export interface KlineBar {
     rsi24?: number;
   };
   kdj?: KDJValues;
+    isAuctionPreview?: boolean;
+    auctionPoints?: { time: string; price: number; volume: number }[];
 }
 
 export interface ForecastPoint {

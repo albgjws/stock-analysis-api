@@ -668,6 +668,76 @@ export class StockDataService {
 
     return [];
   }
+  /**
+   * Check if current time is in call auction period (9:15-9:30 on trading days)
+   */
+  private isCallAuctionTime(): boolean {
+    const now = new Date();
+    const day = now.getDay();
+    if (day === 0 || day === 6) return false;
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const time = h * 100 + m;
+    return time >= 915 && time < 930;
+  }
+
+  /**
+   * Get call auction preview K-line bar for today (9:15-9:30 period)
+   */
+  async getCallAuctionPreview(code: string): Promise<any | null> {
+    const normalized = this.normalizeCode(code);
+    if (!this.isCallAuctionTime()) return null;
+    try {
+      const timeline = await this.sdk.getTodayTimeline(normalized) as any;
+      if (!timeline?.data || timeline.data.length === 0) return null;
+      const auctionData = timeline.data.filter((d: any) => {
+        const t = String(d.time || "");
+        if (!t) return false;
+        const hhmm = parseInt(t.replace(/:/g, ""));
+        return hhmm >= 915 && hhmm < 930 && d.price > 0;
+      });
+      if (auctionData.length === 0) return null;
+      const prices = auctionData.map((d: any) => parseFloat(d.price)).filter((p: number) => p > 0 && isFinite(p));
+      if (prices.length === 0) return null;
+      const openPrice = prices[0];
+      const closePrice = prices[prices.length - 1];
+      const highPrice = Math.max(...prices);
+      const lowPrice = Math.min(...prices);
+      let prevVol = 0;
+      let totalVol = 0;
+      auctionData.forEach((d: any) => {
+        const cumVol = parseInt(d.volume) || 0;
+        const delta = cumVol - prevVol;
+        prevVol = cumVol;
+        totalVol += Math.max(0, delta);
+      });
+      const auctionPoints = auctionData.map((d: any) => ({
+        time: String(d.time || ""),
+        price: parseFloat(d.price) || 0,
+        volume: Math.max(0, (parseInt(d.volume) || 0)),
+      }));
+      const todayStr = new Date().toISOString().split("T")[0];
+      return {
+        date: todayStr,
+        open: openPrice,
+        close: closePrice,
+        high: highPrice,
+        low: lowPrice,
+        volume: totalVol * 100,
+        amount: 0,
+        changePercent: 0,
+        change: 0,
+        timestamp: Date.now(),
+        code: normalized,
+        isAuctionPreview: true,
+        auctionPoints,
+      };
+    } catch (err: any) {
+      console.warn(`[AuctionPreview] Failed for ${normalized}: ${err.message}`);
+      return null;
+    }
+  }
+
 
   /**
    * Get a simple stock code list for local search fallback

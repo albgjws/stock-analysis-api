@@ -119,11 +119,36 @@ export async function getStockProfile(code: string): Promise<any> {
   return res.json();
 }
 
-export async function getValueQuality(code: string): Promise<any> {
-  const url = BASE_URL + '/' + encodeURIComponent(code) + '/value-quality';
+export async function getValueQuality(code: string, recalc?: boolean): Promise<any> {
+  const params = recalc ? "?recalc=true" : "";
+  const url = BASE_URL + '/' + encodeURIComponent(code) + '/value-quality' + params;
   const res = await fetch(url);
   if (!res.ok) return null;
   return res.json();
+}
+
+
+export async function saveValueQualityResult(code: string, result: any): Promise<boolean> {
+  const url = BASE_URL + '/' + encodeURIComponent(code) + '/value-quality';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ result }),
+  });
+  if (!res.ok) return false;
+  return true;
+}
+
+
+export async function getNewsPulse(code: string): Promise<any> {
+  const url = BASE_URL + '/' + encodeURIComponent(code) + '/news-pulse';
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 export { ApiError, NotFoundError };

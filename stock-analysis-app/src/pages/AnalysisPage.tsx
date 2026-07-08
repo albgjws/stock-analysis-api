@@ -5,7 +5,7 @@ import { ReloadOutlined, PlusOutlined } from '@ant-design/icons';
 import { useStockAnalysis } from '../hooks/useStockData';
 import { useTabContext } from '../context/TabContext';
 import { usePolling } from '../hooks/usePolling';
-import { getIntraday, getFundFlow, getQuote, getStockProfile, getValueQuality } from '../api/stockApi';
+import { getIntraday, getFundFlow, getQuote, getStockProfile, getValueQuality, getNewsPulse } from '../api/stockApi';
 import { LoadingSpinner, ErrorState, EmptyState } from '../components/Loading';
 import SearchBar from '../components/SearchBar';
 import StockOverview from '../components/StockOverview';
@@ -64,6 +64,8 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   const [stockProfile, setStockProfile] = useState<any>(null);
   const [valueQuality, setValueQuality] = useState<any>(null);
   const [valueQualityLoading, setValueQualityLoading] = useState(false);
+  const [newsPulse, setNewsPulse] = useState<any>(null);
+  const [newsPulseLoading, setNewsPulseLoading] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
 
   // 实时行情（用于更新涨跌幅）
@@ -92,14 +94,24 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       // 静默失败
     }
   }, [code]);
-  const fetchValueQuality = useCallback(async () => {
+  const fetchValueQuality = useCallback(async (recalc?: boolean) => {
     if (!code) return;
     setValueQualityLoading(true);
     try {
-      const data = await getValueQuality(code);
+      const data = await getValueQuality(code, recalc);
       setValueQuality(data);
     } catch {}
     setValueQualityLoading(false);
+  }, [code]);
+
+  const fetchNewsPulse = useCallback(async () => {
+    if (!code) return;
+    setNewsPulseLoading(true);
+    try {
+      const data = await getNewsPulse(code);
+      setNewsPulse(data);
+    } catch {}
+    setNewsPulseLoading(false);
   }, [code]);
 
   const fetchStockProfile = useCallback(async () => {
@@ -121,14 +133,15 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
   }, [code]);
 
   // 统一刷新：同时更新分析数据、行情、分时、资金流向
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback((recalcVQ?: boolean) => {
     setLastRefresh(new Date().toLocaleTimeString());
     retry();
     fetchQuote();
     fetchIntraday();
     fetchFundFlow();
     fetchStockProfile();
-    fetchValueQuality();
+    fetchValueQuality(recalcVQ);
+    fetchNewsPulse();
 
   }, [retry, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile, fetchValueQuality]);
 
@@ -142,6 +155,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
       getFundFlow(code, 60).then(setFundFlow).catch(() => null),
       getStockProfile(code).then(setStockProfile).catch(() => null),
       getValueQuality(code).then(setValueQuality).catch(() => null),
+      getNewsPulse(code).then(setNewsPulse).catch(() => null),
 
     ]).finally(() => {
       setIntradayLoading(false);
@@ -180,6 +194,16 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
     return () => clearTimeout(timer);
   }, [code, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile]);
+  // 当 valueQuality 无结果时，每 30 秒自动轮询检查
+  useEffect(() => {
+    if (!valueQuality || typeof valueQuality !== 'object') return;
+    if ('hasResult' in valueQuality === false) return;
+    if ((valueQuality as any).hasResult !== false) return;
+    const timer = setInterval(() => {
+      fetchValueQuality(true);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [valueQuality, fetchValueQuality]);
 
   // 午盘收盘（11:30）自动刷新一次
   useEffect(() => {
@@ -206,6 +230,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
     return () => clearTimeout(timer);
   }, [code, fetchQuote, fetchIntraday, fetchFundFlow, fetchStockProfile]);
+
 
   // 合并实时行情数据（用于价格/涨跌幅实时更新）
   // 注意：必须放在所有早期 return 之前（React Hook 规则不能条件性调用）
@@ -408,7 +433,7 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
         {/* Profile data integrated into StockOverview above */}
       </div>
 
-      <ValueQualityCard data={valueQuality} loading={valueQualityLoading} />
+      <ValueQualityCard data={valueQuality} loading={valueQualityLoading} newsPulse={newsPulse} newsPulseLoading={newsPulseLoading} onRefresh={() => fetchValueQuality(true)} />
 
       {/* K线图 — 仅当有K线数据时显示 */}
       {hasKline ? (

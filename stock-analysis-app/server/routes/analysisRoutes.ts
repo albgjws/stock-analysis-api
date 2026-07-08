@@ -10,6 +10,7 @@ import { PredictionHistoryService } from '../services/predictionHistoryService';
 import { PredictionCorrectionService } from '../services/predictionCorrectionService';
 import { SignalBacktestService } from '../services/signalBacktestService';
 import { ValueQualityService } from '../services/valueQualityService';
+import { NewsPulseService } from '../services/newsPulseService';
 import { config } from '../config';
 import type { PredictionResult, SignalResult } from '../types';
 
@@ -23,6 +24,7 @@ const predHistoryService = new PredictionHistoryService();
 const correctionService = new PredictionCorrectionService();
 const signalBacktestService = new SignalBacktestService();
 const valueQualityService = new ValueQualityService();
+const newsPulseService = new NewsPulseService();
 
 // GET /api/stock/:code/intraday — 当日分时图数据
 router.get('/:code/intraday', async (req: Request, res: Response, next: NextFunction) => {
@@ -212,7 +214,21 @@ router.get('/:code/analysis', async (req: Request, res: Response, next: NextFunc
     // 保存预测记录用于回测
     predHistoryService.save(code, prediction, info.price);
 
-    const result: any = { info, kline, prediction, signals };
+          // 集合竞价时段(9:15-9:30)追加今日预览K线
+            try {
+              const auctionBar = await stockDataService.getCallAuctionPreview(code);
+              if (auctionBar) {
+                const lastDate = kline.length > 0 ? kline[kline.length - 1].date : "";
+                const todayStr = new Date().toISOString().split("T")[0];
+                if (lastDate !== todayStr) {
+                  kline = [...kline, auctionBar];
+                  console.log(`[Analysis] Appended auction preview bar for ${code}`);
+                }
+              }
+            } catch (err: any) {
+              console.warn(`[Analysis] Auction preview failed: ${err.message}`);
+            }
+      const result: any = { info, kline, prediction, signals };
     if (klineWarning) result.warning = klineWarning;
 
     // Cache the result（即使K线失败也缓存info部分）
@@ -432,12 +448,34 @@ router.get('/:code/profile', async (req: Request, res: Response, next: NextFunct
 
 
 
-// GET /api/stock/:code/value-quality — AI Berkshire 价值质量评估
+// GET /api/stock/:code/value-quality — AI Berkshire 价值质量评估（自动执行）
 router.get('/:code/value-quality', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { code } = req.params;
-    const result = await valueQualityService.assess(code);
+    const recalc = req.query.recalc === "true";
+    let result;
+    if (recalc) {
+      result = await valueQualityService.recalculate(code);
+    } else {
+      result = await valueQualityService.assess(code);
+    }
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/stock/:code/value-quality — 保存 Codex Skill 评估结果
+router.post('/:code/value-quality', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const { result } = req.body;
+    if (!result) {
+      res.status(400).json({ error: '请提供 result 字段' });
+      return;
+    }
+    await valueQualityService.saveResult(code, result);
+    res.json({ success: true });
   } catch (err) {
     next(err);
   }
@@ -461,5 +499,17 @@ router.get('/:code/profile-debug', async (req: Request, res: Response, next: Nex
     res.json({ error: String(err) });
   }
 });
+
+// GET /api/stock/:code/news-pulse — AI Berkshire news-pulse 异动归因
+router.get('/:code/news-pulse', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { code } = req.params;
+    const result = await newsPulseService.analyze(code);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export { router as analysisRoutes };
 

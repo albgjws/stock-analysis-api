@@ -23,7 +23,9 @@ export default function KlineChart({
 
     const dates = data.map(d => d.date);
     const volumes = data.map(d => d.volume);
-    const ohlc = data.map(d => [d.open, d.close, d.low, d.high]);
+    const ohlc = data.map(d => d.isAuctionPreview
+    ? { value: [d.open, d.close, d.low, d.high], itemStyle: { color: 'rgba(0,47,167,0.3)', color0: 'rgba(0,47,167,0.3)', borderColor: '#002FA7', borderColor0: '#002FA7', opacity: 0.8 } }
+    : [d.open, d.close, d.low, d.high]);
 
     // MA lines
     const ma5Data = data.map(d => d.ma?.ma5 ?? null);
@@ -166,7 +168,22 @@ export default function KlineChart({
       : [];
 
     // 主力资金数据
-    const fundFlowBarData = (fundFlow && fundFlow.length > 0 && showAdvanced)
+        // 集合竞价标记
+    const auctionMarkers: any[] = [];
+    const auctionBarIdx = data.findIndex(d => d.isAuctionPreview);
+    if (auctionBarIdx >= 0) {
+      const auctionBar = data[auctionBarIdx];
+      const range = (auctionBar.high - auctionBar.low) || auctionBar.close * 0.005;
+      auctionMarkers.push({
+        name: '集合竞价',
+        coord: [dates[auctionBarIdx], auctionBar.high + range * 2.5],
+        symbol: 'rect',
+        symbolSize: [80, 20],
+        itemStyle: { color: '#002FA7', borderRadius: 4 },
+        label: { formatter: '集合竞价 9:15-9:30', color: '#fff', fontSize: 10, fontWeight: 'bold', position: 'inside' },
+      });
+    }
+const fundFlowBarData = (fundFlow && fundFlow.length > 0 && showAdvanced)
       ? (() => {
           const flowMap = new Map(fundFlow.map((f: any) => [f.date, f]));
           return dates.map(date => flowMap.get(date)).filter(Boolean).map((f: any) => ({
@@ -191,7 +208,31 @@ export default function KlineChart({
           html += `<div>最高: <b>${d.high.toFixed(2)}</b></div>`;
           html += `<div>最低: <b>${d.low.toFixed(2)}</b></div>`;
           html += `<div>成交量: <b>${d.volume.toLocaleString()}</b></div>`;
-          if (d.changePercent != null) {
+                    if (d.isAuctionPreview) {
+            html += '<div style="border-top:1px solid #002FA7;margin:4px 0 2px;font-size:11px;color:#002FA7;">⚡ 集合竞价预览</div>';
+            html += '<div style="font-size:11px;color:#666;">价格发现期 9:15-9:30</div>';
+            if (d.auctionPoints && d.auctionPoints.length > 0) {
+              const pts = d.auctionPoints.slice(0, 8);
+              pts.forEach((p: any) => {
+                html += '<div style="font-size:11px">' + p.time + ' | ' + Number(p.price).toFixed(2) + '</div>';
+              });
+              if (d.auctionPoints.length > 8) {
+                html += '<div style="font-size:10px;color:#999">...' + (d.auctionPoints.length - 8) + ' 条更多</div>';
+              }
+            }
+          }          if (d.isAuctionPreview) {
+            html += '<div style="border-top:1px solid #002FA7;margin:4px 0 2px;font-size:11px;color:#002FA7;">⚡ 集合竞价预览</div>';
+            html += '<div style="font-size:11px;color:#666;">价格发现期 9:15-9:30</div>';
+            if (d.auctionPoints && d.auctionPoints.length > 0) {
+              const pts = d.auctionPoints.slice(0, 8);
+              pts.forEach((p) => {
+                html += '<div style="font-size:11px">' + p.time + ' | ' + Number(p.price).toFixed(2) + '</div>';
+              });
+              if (d.auctionPoints.length > 8) {
+                html += '<div style="font-size:10px;color:#999">...' + (d.auctionPoints.length - 8) + ' 条更多</div>';
+              }
+            }
+          }if (d.changePercent != null) {
             html += `<div>涨跌幅: <b style="color:${d.changePercent >= 0 ? '#cf1322' : '#3cb371'}">${d.changePercent >= 0 ? '+' : ''}${d.changePercent.toFixed(2)}%</b></div>`;
           }
           params.forEach((p: any) => {
@@ -254,7 +295,7 @@ export default function KlineChart({
       ],
       series: [
         // 0: K线
-        { name: 'K线', type: 'candlestick', animation: false, data: ohlc, itemStyle: { color: '#cf1322', color0: '#3cb371', borderColor: '#cf1322', borderColor0: '#3cb371' }, markPoint: { data: [...signalMarkers, ...advancedMarkers], symbol: 'pin', symbolSize: 30, animation: false } },
+        { name: 'K线', type: 'candlestick', animation: false, data: ohlc, itemStyle: { color: '#cf1322', color0: '#3cb371', borderColor: '#cf1322', borderColor0: '#3cb371' }, markPoint: { data: [...signalMarkers, ...advancedMarkers, ...auctionMarkers], symbol: 'pin', symbolSize: 30, animation: false } },
         // 1: 三把锁scatter
         { name: '三把锁', type: 'scatter', animation: false, xAxisIndex: 0, yAxisIndex: 0, data: threeLocksScatterData, tooltip: { formatter: (p: any) => { const idx = p.data?._idx ?? p.dataIndex; const lock = advancedSignals?.threeLocks?.[idx]; if (!lock) return ''; const t = lock.type === 'buy' ? '买入信号' : '卖出信号'; return `<div style="font-size:13px;line-height:1.8"><b>${lock.date}</b><br/>🔒 <b>${t}（${lock.lockCount}/3）</b><br/>${lock.details.map((d: string) => `· ${d}`).join('<br/>')}<br/><span style="color:${lock.lockCount === 3 ? '#cf1322' : '#fa8c16'}">${lock.lockCount === 3 ? '✅ 三锁全开 — 信号强烈！' : '⚠️ 两锁确认 — 信号较强'}</span></div>`; } } },
         // 2-5: MA
@@ -287,7 +328,7 @@ export default function KlineChart({
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span>📊 K线图</span>
             <span style={{ fontSize: 12, color: '#999', fontWeight: 'normal' }}>
-              {data.length}条 · {data[data.length-1]?.date || ''}
+              {data.length}条 · {data[data.length-1]?.date || ''}{data[data.length-1]?.isAuctionPreview ? ' · ⚡集合竞价' : ''}{data[data.length-1]?.isAuctionPreview ? ' · ⚡集合竞价' : ''}
             </span>
             {signals && (
               <span>

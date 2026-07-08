@@ -1,4 +1,4 @@
-export interface SearchResult {
+﻿export interface SearchResult {
   code: string;
   name: string;
   market: string;
@@ -44,6 +44,8 @@ export interface KlineBar {
   boll?: { mid: number; upper: number; lower: number; bandwidth?: number };
   rsi?: { rsi6?: number; rsi12?: number; rsi24?: number };
   kdj?: { k: number; d: number; j: number };
+  isAuctionPreview?: boolean;
+  auctionPoints?: { time: string; price: number; volume: number }[];
   dmi?: { pdi: number | null; mdi: number | null; adx: number | null; adxr: number | null };
 }
 
@@ -128,6 +130,64 @@ export interface AnalysisResponse {
   kline: KlineBar[];
   prediction: PredictionResult;
   signals: SignalResult;
-  /** 数据源不可用时返回的提示信息 */
+  /** 鏁版嵁婧愪笉鍙敤鏃惰繑鍥炵殑鎻愮ず淇℃伅 */
   warning?: string;
 }
+
+
+export interface ValueQualityIndicator {
+  id: number;
+  name: string;
+  desc: string;
+  value: number | null;
+  threshold: number;
+  unit: string;
+  status: 'PASS' | 'FAIL' | 'MARGINAL' | 'NODATA';
+  score: number;
+  note: string;
+}
+
+export interface ValueQualityMastersScore {
+  buffet: number;
+  munger: number;
+  duan: number;
+  lulu: number;
+  average: number;
+}
+
+export interface ValueQualityStrategy {
+  master: string;
+  style: string;
+  description: string;
+  action: 'buy' | 'hold' | 'watch' | 'avoid';
+}
+
+export interface ValueQualityRecommendation {
+  level: string;
+  levelLabel: string;
+  action: string;
+  priceRange: string;
+  position: string;
+  detail: string;
+}
+
+export interface QualityResult {
+  overall: 'PASS' | 'MARGINAL' | 'FAIL';
+  totalScore: number;
+  indicators: ValueQualityIndicator[];
+  exemptions: string[];
+  mastersScore: ValueQualityMastersScore;
+  financialSnapshot: Record<string, any>;
+  commentary: string;
+  strategy: ValueQualityStrategy;
+  recommendations: ValueQualityRecommendation[];
+}
+
+export interface NoQualityResult {
+  hasResult: false;
+  code: string;
+  name: string;
+  prompt: string;
+}
+
+export type ValueQualityResponse = QualityResult | NoQualityResult;

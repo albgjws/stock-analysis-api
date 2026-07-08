@@ -1,55 +1,13 @@
 /**
  * Value Quality Service
  * 
- * 基于 AI Berkshire 框架的价值质量评分系统
- * 整合巴菲特(财务估值)、芒格(逆向思维)、段永平(商业模式)、李录(长期确定性)四位大师的方法论
- * 
- * 核心评估指标（7条去劣指标）:
- *   1. ROE ≥ 8%（资本效率）
- *   2. 5年自由现金流 ≥ 0（真实盈利）
- *   3. 利息覆盖倍数 ≥ 2（偿债安全）
- *   4. 长期毛利率 ≥ 15%（定价权）
- *   5. 经营现金流/净利润 ≥ 0.7（利润质量）
- *   6. 长期净利率 ≥ 5%（抗风险能力）
- *   7. 5年总股本膨胀 ≤ 20%（股东权益）
+ * AI Berkshire quality-screen 自动评估服务
+ * 打开股票时自动从东方财富API抓取财务数据，计算7项去劣指标
  */
 
+import fs from "fs";
+import path from "path";
 import { StockDataService } from "./stockDataService";
-import { CacheService } from "./cacheService";
-
-export interface QualityResult {
-  overall: "PASS" | "MARGINAL" | "FAIL";
-  totalScore: number;
-  indicators: IndicatorResult[];
-  exemptions: string[];
-  mastersScore: {
-    buffet: number;
-    munger: number;
-    duan: number;
-    lulu: number;
-    average: number;
-  };
-  financialSnapshot: Record<string, any>;
-  commentary: string;
-  strategy: StrategyResult;
-  recommendations: RecommendationItem[];
-}
-
-export interface StrategyResult {
-  master: string;
-  style: string;
-  description: string;
-  action: 'buy' | 'hold' | 'watch' | 'avoid';
-}
-
-export interface RecommendationItem {
-  level: string;
-  levelLabel: string;
-  action: string;
-  priceRange: string;
-  position: string;
-  detail: string;
-}
 
 export interface IndicatorResult {
   id: number;
@@ -63,447 +21,590 @@ export interface IndicatorResult {
   note: string;
 }
 
+export interface MastersScore {
+  buffet: number;
+  munger: number;
+  duan: number;
+  lulu: number;
+  average: number;
+}
+
+export interface StrategyResult {
+  master: string;
+  style: string;
+  description: string;
+  action: "buy" | "hold" | "watch" | "avoid";
+}
+
+export interface RecommendationItem {
+  level: string;
+  levelLabel: string;
+  action: string;
+  priceRange: string;
+  position: string;
+  detail: string;
+}
+
+export interface QualityResult {
+  overall: "PASS" | "MARGINAL" | "FAIL";
+  totalScore: number;
+  indicators: IndicatorResult[];
+  exemptions: string[];
+  mastersScore: MastersScore;
+  financialSnapshot: Record<string, any>;
+  commentary: string;
+  strategy: StrategyResult;
+  recommendations: RecommendationItem[];
+}
+
+export interface NoResultResponse {
+  hasResult: false;
+  code: string;
+  name: string;
+  prompt: string;
+}
+
+export type ValueQualityResponse = QualityResult | NoResultResponse;
+
+/** 年度财务数据行 */
+interface YearData {
+  year: number;
+  reportDate: string;
+  totalRevenue: number;
+  netProfit: number;
+  roe: number | null;
+  grossMargin: number | null;
+  netMargin: number | null;
+  ocf: number | null;
+  investCf: number | null;
+  totalShares: number | null;
+  interestCoverage: number | null;
+  bps: number | null;
+  eps: number | null;
+  leverage: number | null;
+  revenueGrowth: number | null;
+}
+
 export class ValueQualityService {
   private dataService: StockDataService;
-  private cache: CacheService;
+  private dataDir: string;
 
   constructor() {
     this.dataService = new StockDataService();
-    this.cache = new CacheService();
+    this.dataDir = path.resolve(process.cwd(), "data", "value-quality");
+    try {
+      if (!fs.existsSync(this.dataDir)) {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+      }
+    } catch {}
   }
 
-  async assess(code: string): Promise<QualityResult> {
-    const cacheKey = "value_quality_" + code;
-    const cached = await this.cache.get<any>(cacheKey);
-    if (cached) return cached;
+  async assess(code: string): Promise<ValueQualityResponse> {
+    const cleanCode = code.replace(/^(sh|sz|bj|hk)/, "");
+    const filePath = path.join(this.dataDir, cleanCode + ".json");
 
-    const profile = await this.dataService.getStockProfile(code);
-    const raw = await this.fetchFinancialRaw(code);
+    // 检查是否存在已保存的结果
+    try {
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, "utf-8");
+        return JSON.parse(raw) as QualityResult;
+      }
+    } catch (err: any) {
+      console.warn(`[ValueQuality] Failed to read cached: ${err.message}`);
+    }
 
-    // 补充股票名称
-    if (!raw.name) {
+    // 无缓存 -> 自动抓取数据并执行评估
+    console.log(`[ValueQuality] Auto-assessing ${cleanCode}...`);
+    try {
+      const result = await this.autoAssess(code);
+      return result;
+    } catch (err: any) {
+      console.error(`[ValueQuality] Auto-assess failed: ${err.message}`);
+      // 降级：返回无结果提示
+      let name = "";
       try {
         const info = await this.dataService.getStockInfo(code);
-        raw.name = (info as any).name || "";
+        name = (info as any).name || "";
       } catch {}
+      return {
+        hasResult: false,
+        code: cleanCode,
+        name,
+        prompt: `自动评估失败：${err.message}。请稍后重试。`,
+      };
+    }
+  }
+
+  async saveResult(code: string, result: QualityResult): Promise<void> {
+    const cleanCode = code.replace(/^(sh|sz|bj|hk)/, "");
+    const filePath = path.join(this.dataDir, cleanCode + ".json");
+    try {
+      if (!fs.existsSync(this.dataDir)) {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+      }
+      fs.writeFileSync(filePath, JSON.stringify(result, null, 2), "utf-8");
+      console.log(`[ValueQuality] Saved for ${cleanCode}`);
+    } catch (err: any) {
+      console.error(`[ValueQuality] Save failed: ${err.message}`);
+      throw err;
+    }
+  }
+
+  // ===================== 自动评估 =====================
+
+  async autoAssess(code: string): Promise<QualityResult> {
+    const cleanCode = code.replace(/^(sh|sz|bj|hk)/, "");
+    const market = code.startsWith("sh") ? "1" : "0";
+
+    // 1. 获取股票基本信息
+    let name = cleanCode;
+    let info: any = {};
+    try {
+      info = await this.dataService.getStockInfo(code);
+      name = (info as any).name || cleanCode;
+    } catch {}
+
+    // 2. 获取15年年度财务数据
+    const yearDataList = await this.fetchFinancialData(cleanCode, market);
+    if (yearDataList.length < 3) {
+      throw new Error(`获取 ${name}(${cleanCode}) 财务数据不足`);
     }
 
-    const indicators = this.computeIndicators(raw, profile);
-    const exemptions = this.checkExemptions(indicators, raw);
+    // 3. 计算7项指标
+    const indicators = this.computeIndicators(yearDataList, name);
+    const exemptResults = this.checkExemptions(indicators, yearDataList);
+
+    // 4. 统计结果
+    const failCount = indicators.filter(i => i.status === "FAIL").length;
+    const marginalCount = indicators.filter(i => i.status === "MARGINAL").length;
     const totalScore = indicators.reduce((s, i) => s + i.score, 0);
 
-    const fails = indicators.filter(i => i.status === "FAIL").length;
-    const noDatas = indicators.filter(i => i.status === "NODATA").length;
-    let overall: "PASS" | "MARGINAL" | "FAIL";
-    if (noDatas >= 4) {
-      overall = "MARGINAL";
-    } else if (fails === 0) {
-      overall = "PASS";
-    } else if (fails <= 2 && exemptions.length > 0) {
-      overall = "MARGINAL";
-    } else {
-      overall = "FAIL";
-    }
+    // 官方去劣筛选逻辑：FAIL >= 2 直接排除；FAIL = 1 边界通过(需豁免)；全部通过或仅微量边界为通过
+    const overall: "PASS" | "MARGINAL" | "FAIL" =
+      failCount >= 2 ? "FAIL" :
+      failCount === 1 ? "MARGINAL" :
+      marginalCount >= 3 ? "MARGINAL" :
+      "PASS";
 
-    const mastersScore = this.computeMastersScore(indicators, raw, profile);
-    const strategy = this.generateStrategy(overall, totalScore, mastersScore, indicators, raw);
-    const recommendations = this.generateRecommendations(overall, totalScore, mastersScore, indicators, raw);
-    const commentary = this.generateCommentary(overall, totalScore, indicators, mastersScore, raw.name || '');
+    // 5. 构建财务快照
+    const last = yearDataList[0];
+    const financialSnapshot: Record<string, any> = {
+      "最新营收": last.totalRevenue ? (last.totalRevenue / 1e8).toFixed(2) + "亿" : "N/A",
+      "最新净利润": last.netProfit ? (last.netProfit / 1e8).toFixed(2) + "亿" : "N/A",
+      "最新毛利率": last.grossMargin !== null ? last.grossMargin.toFixed(2) + "%" : "N/A",
+      "最新净利率": last.netMargin !== null ? last.netMargin.toFixed(2) + "%" : "N/A",
+      "最新ROE": last.roe !== null ? last.roe.toFixed(2) + "%" : "N/A",
+      "最新EPS": last.eps !== null ? last.eps.toFixed(2) : "N/A",
+      "BPS": last.bps !== null ? last.bps.toFixed(2) : "N/A",
+      "负债率": last.leverage !== null ? last.leverage.toFixed(1) + "%" : "N/A",
+      "数据年份": last.year + "年报",
+    };
+    if (info.price) financialSnapshot["当前价"] = info.price;
+    if (info.marketCap) financialSnapshot["市值"] = (info.marketCap * 1e8).toLocaleString() + "亿";
+    if ((info as any).pe) financialSnapshot["PE"] = (info as any).pe;
+    if ((info as any).pb) financialSnapshot["PB"] = (info as any).pb;
+
+    // 6. 生成大师评分、策略、建议
+    const mastersScore = this.computeMastersScore(indicators);
+    const strategy = this.generateStrategy(overall, indicators, name);
+    const recommendations = this.generateRecommendations(overall, indicators, info);
+    const commentary = this.generateCommentary(name, cleanCode, overall, indicators, exemptResults);
 
     const result: QualityResult = {
-      overall, totalScore, indicators, exemptions, mastersScore,
-      financialSnapshot: {
-        industry: profile.industry || raw.industry || "",
-        region: profile.region || "",
-        concepts: profile.concepts?.map((c: any) => c.name).join(", ") || "",
-        pe: profile.pe || raw.pe,
-        pb: profile.pb || raw.pb,
-        marketCap: profile.marketCap,
-        high52w: profile.high52w,
-        low52w: profile.low52w,
-      },
+      overall,
+      totalScore,
+      indicators,
+      exemptions: exemptResults,
+      mastersScore,
+      financialSnapshot,
+      commentary,
       strategy,
       recommendations,
-      commentary,
     };
 
-    await this.cache.set(cacheKey, result, 3600000);
+    // 7. 保存到文件
+    await this.saveResult(code, result);
     return result;
   }
 
-  private async fetchFinancialRaw(code: string): Promise<Record<string, any>> {
-    const raw: Record<string, any> = {};
-    try {
-      const normalized = code.replace(/^(sh|sz|bj|hk)/, "");
-      const market = code.startsWith("sh") ? "sh" : code.startsWith("sz") ? "sz" : code.startsWith("bj") ? "bj" : "sh";
-      const url = "https://qt.gtimg.cn/q=" + market + normalized;
-      const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      const text = await resp.text();
-      const match = text.match(/"(.+)"/);
-      if (match) {
-        const parts = match[1].split("~");
-        raw.name = parts[1] || "";
-        raw.price = parseFloat(parts[3]) || 0;
-        raw.pe = parseFloat(parts[39]) || null;
-        raw.marketCap = parseFloat(parts[44]) || null;
-        raw.circulatingCap = parseFloat(parts[45]) || null;
-        raw.high52w = parseFloat(parts[53]) || null;
-        raw.low52w = parseFloat(parts[54]) || null;
-        raw.industry = parts[77] || "";
-      }
-    } catch {}
+  // ===================== 财务数据抓取 =====================
 
-    try {
-      const sdkInfo = await this.dataService.getStockInfo(code);
-      if (sdkInfo) {
-        raw.pe = raw.pe || (sdkInfo as any).pe;
-        raw.price = raw.price || (sdkInfo as any).price;
-        raw.marketCap = raw.marketCap || (sdkInfo as any).marketCap;
-        raw.amount = (sdkInfo as any).amount;
-      }
-    } catch {}
+  private async fetchFinancialData(code: string, market: string): Promise<YearData[]> {
+    const secId = market + "." + code;
+    const encodedSecId = encodeURIComponent(code + "." + (market === "0" ? "SZ" : "SH"));
 
-    return raw;
+    // 从东方财富数据中心API获取年报数据
+    const columns = [
+      "SECUCODE", "REPORT_DATE", "REPORT_TYPE",
+      "TOTALOPERATEREVE", "PARENTNETPROFIT",
+      "ROEJQ", "BPS", "EPSJB",
+      "XSMLL", "XSJLL",
+      "NETCASH_OPERATE_PK", "NETCASH_INVEST_PK",
+      "TOTAL_SHARE", "INTSTCOVRATE", "ZCFZL",
+      "DJD_TOI_YOY"
+    ].join(",");
+
+    const url = "https://datacenter-web.eastmoney.com/api/data/v1/get?" +
+      "reportName=RPT_F10_FINANCE_MAINFINADATA" +
+      "&columns=" + columns +
+      "&pageNumber=1&pageSize=15" +
+      "&sortTypes=-1&sortColumns=REPORT_DATE" +
+      "&source=HSF10&client=PC" +
+      "&filter=(SECUCODE=%22" + encodedSecId + "%22)(REPORT_TYPE=%22%E5%B9%B4%E6%8A%A5%22)";
+
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://emweb.securities.eastmoney.com/"
+      }
+    });
+    const data: any = await resp.json();
+
+    if (!data.success || !data.result?.data) {
+      throw new Error("无法获取财务数据: " + (data.message || "未知错误"));
+    }
+
+    const yearList: YearData[] = [];
+    for (const item of data.result.data) {
+      const year = parseInt(item.REPORT_DATE.substring(0, 4));
+      if (isNaN(year)) continue;
+      yearList.push({
+        year,
+        reportDate: item.REPORT_DATE,
+        totalRevenue: item.TOTALOPERATEREVE || 0,
+        netProfit: item.PARENTNETPROFIT || 0,
+        roe: item.ROEJQ ?? null,
+        grossMargin: item.XSMLL ?? null,
+        netMargin: item.XSJLL ?? null,
+        ocf: item.NETCASH_OPERATE_PK ?? null,
+        investCf: item.NETCASH_INVEST_PK ?? null,
+        totalShares: item.TOTAL_SHARE ?? null,
+        interestCoverage: item.INTSTCOVRATE ?? null,
+        bps: item.BPS ?? null,
+        eps: item.EPSJB ?? null,
+        leverage: item.ZCFZL ?? null,
+        revenueGrowth: item.DJD_TOI_YOY ?? null,
+      });
+    }
+
+    return yearList;
   }
 
-  private computeIndicators(raw: Record<string, any>, profile: any): IndicatorResult[] {
+  // ===================== 7项指标计算 =====================
+
+  private computeIndicators(years: YearData[], name: string): IndicatorResult[] {
+    // 取最近10年
+    const recent10 = years.slice(0, 10).reverse();
+    const recent5 = years.slice(0, 5);
+
+    // --- 指标1: 10年平均ROE ---
+    const roeValues = recent10.filter(y => y.roe !== null).map(y => y.roe!);
+    const avgROE = roeValues.length >= 5 ? roeValues.reduce((a, b) => a + b, 0) / roeValues.length : null;
+    const roeDataStr = recent10.map(y => y.year + "年 " + (y.roe !== null ? y.roe.toFixed(1) + "%" : "N/A")).join(", ");
+
+    // --- 指标2: 5年累计自由现金流 ---
+    const fcfValues = recent5.map(y => (y.ocf !== null ? y.ocf : 0) + (y.investCf !== null ? y.investCf : 0));
+    const cumFCF = fcfValues.reduce((a, b) => a + b, 0);
+    const fcfDataStr = recent5.map(y => y.year + "年 " + ((y.ocf !== null ? y.ocf + (y.investCf !== null ? y.investCf : 0) : 0) / 1e8).toFixed(1) + "亿").join(", ");
+
+    // --- 指标3: 利息覆盖倍数 ---
+    const icValues = years.filter(y => y.interestCoverage !== null).map(y => y.interestCoverage!);
+    const latestIC = icValues.length > 0 ? icValues[0] : null;
+
+    // --- 指标4: 长期毛利率 ---
+    const grossValues = recent10.filter(y => y.grossMargin !== null).map(y => y.grossMargin!);
+    const avgGross = grossValues.length >= 5 ? grossValues.reduce((a, b) => a + b, 0) / grossValues.length : null;
+    const grossDataStr = recent10.map(y => y.year + "年 " + (y.grossMargin !== null ? y.grossMargin.toFixed(1) + "%" : "N/A")).join(", ");
+
+    // --- 指标5: 经营现金流/净利润 ---
+    const ocfnpValues = recent5.map(y => {
+      if (y.ocf !== null && y.netProfit > 0) return y.ocf / y.netProfit;
+      return null;
+    }).filter(v => v !== null) as number[];
+    const avgOcfNp = ocfnpValues.length >= 3 ? ocfnpValues.reduce((a, b) => a + b, 0) / ocfnpValues.length : null;
+    const ocfnpDataStr = recent5.map((y, i) => {
+      const ratio = y.ocf !== null && y.netProfit > 0 ? (y.ocf / y.netProfit).toFixed(2) : "N/A";
+      return y.year + "年 " + ratio;
+    }).join(", ");
+
+    // --- 指标6: 长期净利率 ---
+    const netValues = recent10.filter(y => y.netMargin !== null).map(y => y.netMargin!);
+    const avgNet = netValues.length >= 5 ? netValues.reduce((a, b) => a + b, 0) / netValues.length : null;
+    const netDataStr = recent10.map(y => y.year + "年 " + (y.netMargin !== null ? y.netMargin.toFixed(1) + "%" : "N/A")).join(", ");
+
+    // --- 指标7: 5年总股本膨胀 ---
+    const shareValues = years.filter(y => y.totalShares !== null).map(y => y.totalShares!);
+    const shareChange = shareValues.length >= 2
+      ? ((shareValues[0] - shareValues[shareValues.length - 1]) / shareValues[shareValues.length - 1]) * 100
+      : null;
+
     const indicators: IndicatorResult[] = [];
-    const pe = profile?.pe || raw.pe;
-    const pb = profile?.pb || raw.pb;
 
-    let roe: number | null = null;
-    if (pe && pb && pe > 0) {
-      roe = +(pb / pe * 100).toFixed(1);
-    }
+    // 指标1: ROE
+    const roeStatus: "PASS" | "FAIL" | "MARGINAL" = avgROE !== null && avgROE >= 8 ? "PASS" : avgROE !== null && avgROE >= 6 ? "MARGINAL" : "FAIL";
     indicators.push({
-      id: 1, name: "ROE", desc: "巴菲特：资本效率", value: roe, threshold: 8, unit: "%",
-      status: roe === null ? "NODATA" : roe >= 8 ? "PASS" : roe >= 5 ? "MARGINAL" : "FAIL",
-      score: roe === null ? 0 : roe >= 15 ? 15 : roe >= 8 ? 12 : roe >= 5 ? 6 : 0,
-      note: roe === null ? "数据不足" : roe >= 15 ? "优秀 ✓" : roe >= 8 ? "合格" : "低于阈值",
+      id: 1, name: "10年平均ROE",
+      desc: "资本效率——股东的钱能不能跑赢机会成本",
+      value: avgROE !== null ? parseFloat(avgROE.toFixed(2)) : null,
+      threshold: 8, unit: "%",
+      status: roeStatus, score: roeStatus === "PASS" ? 15 : roeStatus === "MARGINAL" ? 6 : 3,
+      note: `平均${avgROE !== null ? avgROE.toFixed(2) + "%" : "数据不足"}，阈值8%。历史数据: ${roeDataStr}`
     });
 
-    const amount = raw.amount || 0;
-    const estFcfPositive = amount > 0 || true;
+    // 指标2: FCF
+    const fcfStatus: "PASS" | "FAIL" = cumFCF >= 0 ? "PASS" : "FAIL";
     indicators.push({
-      id: 2, name: "5年FCF", desc: "段永平：赚真钱", value: estFcfPositive ? 1 : 0, threshold: 0, unit: "",
-      status: "NODATA", score: 5,
-      note: "需详细财报数据评估",
+      id: 2, name: "5年累计自由现金流",
+      desc: "真金白银——利润是不是纸面富贵",
+      value: parseFloat((cumFCF / 1e8).toFixed(2)),
+      threshold: 0, unit: "亿",
+      status: fcfStatus, score: fcfStatus === "PASS" ? 15 : 2,
+      note: `5年累计${cumFCF >= 0 ? "为" : ""}${(cumFCF / 1e8).toFixed(2)}亿，需为正。各年: ${fcfDataStr}`
     });
 
-    let interestCover: number | null = null;
-    if (pe && pe > 0 && pe < 50) {
-      interestCover = pe < 15 ? 5 : pe < 25 ? 3 : pe < 40 ? 2 : 1.5;
-    }
+    // 指标3: 利息覆盖
+    const icStatus: "PASS" | "FAIL" | "MARGINAL" = latestIC !== null && latestIC >= 2 ? "PASS" : latestIC !== null && latestIC >= 1 ? "MARGINAL" : "FAIL";
     indicators.push({
-      id: 3, name: "利息覆盖", desc: "巴菲特：偿债安全", value: interestCover, threshold: 2, unit: "倍",
-      status: interestCover === null ? "NODATA" : interestCover >= 2 ? "PASS" : "FAIL",
-      score: interestCover === null ? 0 : interestCover >= 5 ? 15 : interestCover >= 2 ? 12 : 0,
-      note: interestCover === null ? "数据不足" : interestCover >= 3 ? "安全 ✓" : "需要关注",
+      id: 3, name: "利息覆盖倍数",
+      desc: "偿债安全——还利息的能力",
+      value: latestIC !== null ? parseFloat(latestIC.toFixed(1)) : null,
+      threshold: 2, unit: "x",
+      status: icStatus, score: icStatus === "PASS" ? 15 : icStatus === "MARGINAL" ? 8 : 3,
+      note: latestIC !== null ? `最新${latestIC.toFixed(1)}x，阈值≥2x` : "数据不足"
     });
 
-    const grossMarginEst = this.estimateGrossMargin(profile?.industry || raw.industry || "");
+    // 指标4: 毛利率
+    const grossStatus: "PASS" | "FAIL" | "MARGINAL" = avgGross !== null && avgGross >= 15 ? "PASS" : avgGross !== null && avgGross >= 10 ? "MARGINAL" : "FAIL";
     indicators.push({
-      id: 4, name: "毛利率", desc: "芒格：定价权", value: grossMarginEst, threshold: 15, unit: "%",
-      status: grossMarginEst === null ? "NODATA" : grossMarginEst >= 15 ? "PASS" : grossMarginEst >= 10 ? "MARGINAL" : "FAIL",
-      score: grossMarginEst === null ? 0 : grossMarginEst >= 30 ? 15 : grossMarginEst >= 15 ? 12 : grossMarginEst >= 10 ? 6 : 0,
-      note: grossMarginEst === null ? "需详细财报" : "基于行业特征估算",
+      id: 4, name: "长期毛利率",
+      desc: "定价权——产品/服务有没有差异化",
+      value: avgGross !== null ? parseFloat(avgGross.toFixed(2)) : null,
+      threshold: 15, unit: "%",
+      status: grossStatus, score: grossStatus === "PASS" ? 15 : grossStatus === "MARGINAL" ? 8 : 3,
+      note: `平均${avgGross !== null ? avgGross.toFixed(2) + "%" : "数据不足"}，阈值15%。各年: ${grossDataStr}`
     });
 
-    const cashFlowRatio = this.estimateCashFlowQuality(pe, pb);
+    // 指标5: OCF/NI
+    const ocfStatus: "PASS" | "FAIL" | "MARGINAL" = avgOcfNp !== null && avgOcfNp >= 0.7 ? "PASS" : avgOcfNp !== null && avgOcfNp >= 0.5 ? "MARGINAL" : "FAIL";
     indicators.push({
-      id: 5, name: "FCF/净利", desc: "李录：利润变现", value: cashFlowRatio, threshold: 0.7, unit: "倍",
-      status: cashFlowRatio === null ? "NODATA" : cashFlowRatio >= 0.7 ? "PASS" : "FAIL",
-      score: cashFlowRatio === null ? 0 : cashFlowRatio >= 1 ? 15 : cashFlowRatio >= 0.7 ? 12 : 6,
-      note: cashFlowRatio === null ? "数据不足" : cashFlowRatio >= 1 ? "优秀 ✓" : "利润质量一般",
+      id: 5, name: "经营现金流/净利润",
+      desc: "利润质量——赚到的利润能不能收回现金",
+      value: avgOcfNp !== null ? parseFloat(avgOcfNp.toFixed(2)) : null,
+      threshold: 0.7, unit: "",
+      status: ocfStatus, score: ocfStatus === "PASS" ? 15 : ocfStatus === "MARGINAL" ? 8 : 3,
+      note: `5年均值${avgOcfNp !== null ? avgOcfNp.toFixed(2) : "N/A"}，阈值≥0.7。各年: ${ocfnpDataStr}`
     });
 
-    const netMargin = this.estimateNetMargin(pe, profile?.industry || "");
+    // 指标6: 净利率
+    const netStatus: "PASS" | "FAIL" | "MARGINAL" = avgNet !== null && avgNet >= 5 ? "PASS" : avgNet !== null && avgNet >= 3 ? "MARGINAL" : "FAIL";
     indicators.push({
-      id: 6, name: "净利率", desc: "段永平：抗风险", value: netMargin, threshold: 5, unit: "%",
-      status: netMargin === null ? "NODATA" : netMargin >= 5 ? "PASS" : netMargin >= 3 ? "MARGINAL" : "FAIL",
-      score: netMargin === null ? 0 : netMargin >= 10 ? 15 : netMargin >= 5 ? 12 : netMargin >= 3 ? 6 : 0,
-      note: netMargin === null ? "数据不足" : netMargin >= 10 ? "优秀 ✓" : netMargin >= 5 ? "合格" : "偏低",
+      id: 6, name: "长期净利率",
+      desc: "抗风险能力——收入波动时利润是否归零",
+      value: avgNet !== null ? parseFloat(avgNet.toFixed(2)) : null,
+      threshold: 5, unit: "%",
+      status: netStatus, score: netStatus === "PASS" ? 15 : netStatus === "MARGINAL" ? 8 : 3,
+      note: `平均${avgNet !== null ? avgNet.toFixed(2) + "%" : "数据不足"}，阈值5%。各年: ${netDataStr}`
     });
 
-    const dilution = 0;
+    // 指标7: 股本膨胀
+    const shareStatus: "PASS" | "FAIL" = shareChange !== null && shareChange <= 20 ? "PASS" : "FAIL";
     indicators.push({
-      id: 7, name: "股本膨胀", desc: "芒格：股东权益", value: dilution, threshold: 20, unit: "%",
-      status: "PASS", score: 15,
-      note: "需历史数据精确计算",
+      id: 7, name: "5年总股本膨胀",
+      desc: "股东利益——管理层是否在稀释你的权益",
+      value: shareChange !== null ? parseFloat(shareChange.toFixed(1)) : null,
+      threshold: 20, unit: "%",
+      status: shareStatus, score: shareStatus === "PASS" ? 15 : 0,
+      note: shareChange !== null ? `总股本变化${shareChange.toFixed(1)}%，阈值≤20%` : "数据不足"
     });
 
     return indicators;
   }
 
-  private estimateGrossMargin(industry: string): number | null {
-    const m: Record<string, number> = {
-      "白酒": 75, "酒": 70, "饮料": 60, "医药": 50, "软件": 60, "互联网": 50,
-      "食品": 35, "家电": 25, "汽车": 15, "银行": 0, "保险": 20,
-      "房地产": 25, "煤炭": 25, "钢铁": 10, "化工": 20, "电子": 20,
-      "半导体": 35, "通信": 25, "计算机": 30, "证券": 40,
-    };
-    for (const [k, v] of Object.entries(m)) {
-      if (industry.includes(k)) return v;
-    }
-    return 25;
-  }
+  // ===================== 豁免检查 =====================
 
-  private estimateCashFlowQuality(pe: number | null, pb: number | null): number | null {
-    if (!pe || !pb) return null;
-    if (pe > 50 && pb < 2) return 0.5;
-    if (pe < 15 && pb > 1.5) return 1.2;
-    if (pe < 25) return 0.9;
-    return 0.7;
-  }
-
-  private estimateNetMargin(pe: number | null, industry: string): number | null {
-    if (!pe) return null;
-    if (pe > 50) return 12;
-    if (pe > 30) return 8;
-    if (pe > 15) return 5;
-    return 3;
-  }
-
-  private checkExemptions(indicators: IndicatorResult[], raw: Record<string, any>): string[] {
+  private checkExemptions(indicators: IndicatorResult[], years: YearData[]): string[] {
     const exemptions: string[] = [];
-    const roeInd = indicators.find(i => i.id === 1);
-    const marginInd = indicators.find(i => i.id === 4);
-    const netMarginInd = indicators.find(i => i.id === 6);
 
-    if (roeInd && roeInd.status !== "PASS" && marginInd && marginInd.value && marginInd.value >= 30) {
-      exemptions.push("豁免A：战略投入期 — 高毛利率证明商业模式优秀，ROE低因仍处于投入期");
+    // 获取关键数据
+    const roeInd = indicators.find(i => i.id === 1);
+    const grossInd = indicators.find(i => i.id === 4);
+    const netInd = indicators.find(i => i.id === 6);
+    const ocfInd = indicators.find(i => i.id === 5);
+
+    const latest2Years = years.slice(0, 2);
+    const avgGross = grossInd?.value ?? 0;
+    const avgNet = netInd?.value ?? 0;
+    const avgRoe = roeInd?.value ?? 0;
+    const avgOcfNi = ocfInd?.value ?? 0;
+
+    // 检查最近2年经营现金流是否为正
+    const recentOcfPositive = latest2Years.every(y => y.ocf !== null && y.ocf > 0);
+    // 上市时间(简化: 用最早数据年份判断)
+    const earliestYear = years.length > 0 ? Math.min(...years.map(y => y.year)) : 0;
+    const listedLessThan10Y = (new Date().getFullYear() - earliestYear) < 10;
+
+    // 豁免A: 战略投入期豁免(适用于ROE)
+    if ((roeInd?.status === "FAIL" || roeInd?.status === "MARGINAL") && listedLessThan10Y && avgGross > 30 && recentOcfPositive) {
+      exemptions.push("豁免A(战略投入期): ROE因投入期不达标，但毛利率>30%且经营现金流为正，豁免通过");
+      roeInd.status = "PASS";
+      roeInd.score = 10;
+      roeInd.note += " 【豁免A通过】";
     }
-    if (netMarginInd && netMarginInd.status !== "PASS" && marginInd && marginInd.value && marginInd.value >= 30) {
-      exemptions.push("豁免B：主动低利润率 — 有定价权但选择再投资扩张");
+
+    // 豁免B: 主动低利润率豁免(适用于净利率)
+    if ((netInd?.status === "FAIL" || netInd?.status === "MARGINAL") && avgGross > 30) {
+      // 检查最近2年净利率是否回升至5%以上
+      const recentNetRising = latest2Years.every(y => y.netMargin !== null && y.netMargin >= 5);
+      if (recentNetRising) {
+        exemptions.push("豁免B(主动低利润率): 净利率虽低但毛利率>30%有定价权，近年已回升至5%以上，豁免通过");
+        netInd!.status = "PASS";
+        netInd!.score = 10;
+        netInd!.note += " 【豁免B通过】";
+      }
     }
-    if ((marginInd?.status === "FAIL" || netMarginInd?.status === "FAIL") && raw.pe && raw.pe < 10) {
-      exemptions.push("豁免C：高周转薄利模式 — 低PE表明商业模式有效");
+
+    // 豁免C: 高周转薄利模式豁免(适用于毛利率和净利率)
+    if (avgRoe > 20 && avgOcfNi > 1.0) {
+      exemptions.push("豁免C(高周转薄利): ROE>20%且OCF/NI>1.0，属于高周转薄利模式，豁免毛利率和净利率");
+      if (grossInd?.status === "FAIL" || grossInd?.status === "MARGINAL") {
+        grossInd!.status = "PASS";
+        grossInd!.score = Math.max(grossInd!.score, 10);
+        grossInd!.note += " 【豁免C通过】";
+      }
+      if (netInd?.status === "FAIL" || netInd?.status === "MARGINAL") {
+        netInd!.status = "PASS";
+        netInd!.score = Math.max(netInd!.score, 10);
+        netInd!.note += " 【豁免C通过】";
+      }
     }
 
     return exemptions;
   }
 
-  private computeMastersScore(indicators: IndicatorResult[], raw: Record<string, any>, profile: any) {
-    const pe = profile?.pe || raw.pe;
-    const pb = profile?.pb || raw.pb;
+  // ===================== 大师评分 =====================
 
-    let buffet = 3.0;
-    if (pe && pe > 0 && pe < 15) buffet += 1.5;
-    else if (pe && pe < 25) buffet += 0.5;
-    else if (pe && pe > 50) buffet -= 0.5;
-    if (pb && pb > 1.5) buffet += 0.5;
-    const roeInd = indicators.find(i => i.id === 1);
-    if (roeInd && roeInd.status === "PASS") buffet += 1.0;
-    buffet = Math.max(1, Math.min(5, buffet));
+  private computeMastersScore(indicators: IndicatorResult[]): MastersScore {
+    const failCount = indicators.filter(i => i.status === "FAIL").length;
+    const marginalCount = indicators.filter(i => i.status === "MARGINAL").length;
+    const passCount = indicators.filter(i => i.status === "PASS").length;
 
-    let munger = 3.0;
-    const marginInd = indicators.find(i => i.id === 4);
-    if (marginInd && marginInd.value && marginInd.value >= 30) munger += 1.0;
-    if (marginInd && marginInd.value && marginInd.value >= 50) munger += 0.5;
-    const dilutionInd = indicators.find(i => i.id === 7);
-    if (dilutionInd && dilutionInd.status === "PASS") munger += 0.5;
-    munger = Math.max(1, Math.min(5, munger));
-
-    let duan = 3.0;
-    if (marginInd && marginInd.value && marginInd.value >= 40) duan += 1.0;
-    const cashFlowInd = indicators.find(i => i.id === 5);
-    if (cashFlowInd && cashFlowInd.status === "PASS") duan += 0.5;
-    if (profile?.concepts && profile.concepts.length > 0) duan += 0.5;
-    duan = Math.max(1, Math.min(5, duan));
-
-    let lulu = 3.0;
-    if (pe && pe > 0 && pe < 20) lulu += 1.0;
-    if (profile?.industry && (profile.industry.includes("酒") || profile.industry.includes("医药") || profile.industry.includes("消费"))) lulu += 1.0;
-    lulu = Math.max(1, Math.min(5, lulu));
-
-    const average = +((buffet + munger + duan + lulu) / 4).toFixed(1);
-    return { buffet: +buffet.toFixed(1), munger: +munger.toFixed(1), duan: +duan.toFixed(1), lulu: +lulu.toFixed(1), average };
-  }
-
-  /** 生成策略建议 */
-  private generateStrategy(overall: string, score: number, masters: any, indicators: IndicatorResult[], raw: Record<string, any>): StrategyResult {
-    const master = masters.duan >= 4.5 ? '段永平' : masters.buffet >= 4.5 ? '巴菲特' : masters.munger >= 4 ? '芒格' : '李录';
-    let style = '';
-    let description = '';
-    let action: 'buy' | 'hold' | 'watch' | 'avoid' = 'watch';
-
-    if (overall === 'PASS') {
-      const pe = raw.pe || 0;
-      if (pe > 0 && pe < 15) {
-        style = '深度价值';
-        description = '低PE优质公司，符合巴菲特「用合理价格买入伟大公司」标准。当前估值低于内在价值，适合分批建仓长期持有。';
-        action = 'buy';
-      } else if (pe < 25) {
-        style = '合理估值成长';
-        description = '优质公司估值合理，符合段永平「好的生意，好的价格」标准。当前价位适合布局，建议分批买入。';
-        action = 'buy';
-      } else if (pe < 40) {
-        style = '优质溢价';
-        description = '公司质量优秀但估值偏高，芒格会提醒注意安全边际。适合持有现有仓位，新仓位等待回调。';
-        action = 'hold';
-      } else {
-        style = '成长溢价';
-        description = '高质量但估值较高，符合李录「长期确定性」但价格不便宜。建议耐心等待更好的买入机会。';
-        action = 'hold';
-      }
-    } else if (overall === 'MARGINAL') {
-      style = '观望等待';
-      description = '处于临界状态，需要更多信息确认。建议暂时观望，等待财报数据或基本面改善信号。';
-      action = 'watch';
+    // 根据整体判定调整基础分：排除→低分，通过→高分
+    let baseScore: number;
+    if (failCount >= 2) {
+      baseScore = 1;  // 排除
+    } else if (failCount === 1) {
+      baseScore = 2;  // 边界
+    } else if (marginalCount >= 3) {
+      baseScore = 2;  // 多项边界
     } else {
-      style = '回避';
-      description = '不符合一流公司标准，存在明确的基本面缺陷。建议回避，不要因为价格便宜而买入质量差的公司。';
-      action = 'avoid';
+      baseScore = Math.min(5, Math.max(3, Math.round(passCount * 5 / 7)));
     }
 
-    return { master, style, description, action };
-  }
-
-  /** 生成分层买卖建议 */
-      private generateRecommendations(overall: string, score: number, masters: any, indicators: IndicatorResult[], raw: Record<string, any>): RecommendationItem[] {
-    const items: RecommendationItem[] = [];
-    const price = raw.price || 0;
-    const pe = raw.pe || 0;
-    const eps = pe > 0 && price > 0 ? price / pe : 0;
-
-    var fairPE = 20;
-    if (overall === 'PASS') {
-      if (masters.buffet >= 4 && masters.lulu >= 4) {
-        fairPE = 25;
-      } else if (masters.buffet >= 3.5) {
-        fairPE = 20;
-      } else {
-        fairPE = 15;
-      }
-    } else if (overall === 'MARGINAL') {
-      fairPE = 12;
-    } else {
-      fairPE = 10;
-    }
-
-    var fairPrice = eps * fairPE;
-    var buy2Price = price * 0.88;
-    var buy3Price = price * 0.78;
-    var sellTarget = fairPrice > price ? fairPrice : price * 1.3;
-    var stopLoss = price * 0.85;
-
-    if (overall === 'PASS') {
-      items.push({
-        level: 'aggressive',
-        levelLabel: '\u6fc0\u8fdb\u578b',
-        action: '\u4e70\u5165',
-        priceRange: '\u2264 ' + price.toFixed(2),
-        position: '20%\u4ed3\u4f4d',
-        detail: '\u5f53\u524d\u4ef7' + price.toFixed(2) + '\uff0c\u5408\u7406\u4f30\u503c' + fairPrice.toFixed(2) + '\uff08PE' + fairPE + 'x\uff09\uff0c\u5411\u4e0a\u7a7a\u95f4' + (fairPrice > price ? '+' + ((fairPrice/price - 1) * 100).toFixed(1) : '\u6709\u9650') + '%'
-      });
-      items.push({
-        level: 'moderate',
-        levelLabel: '\u7a33\u5065\u578b',
-        action: '\u5206\u6279\u4e70\u5165',
-        priceRange: '\u2264 ' + buy2Price.toFixed(2),
-        position: '10-15%\u4ed3\u4f4d',
-        detail: '\u56de\u8c03-' + ((1 - price/buy2Price) * 100).toFixed(0) + '%\u81f3' + buy2Price.toFixed(2) + '\u65f6\u52a0\u4ed3\uff0c\u83b7\u53d6\u66f4\u9ad8\u5b89\u5168\u8fb9\u9645'
-      });
-      items.push({
-        level: 'conservative',
-        levelLabel: '\u4fdd\u5b88\u578b',
-        action: '\u6df1\u5ea6\u56de\u8c03\u4e70\u5165',
-        priceRange: '\u2264 ' + buy3Price.toFixed(2),
-        position: '5-10%\u4ed3\u4f4d',
-        detail: '\u6781\u7aef\u4f4e\u4f30' + buy3Price.toFixed(2) + '\uff08\u8f83\u73b0\u4ef7-' + ((1 - buy3Price/price) * 100).toFixed(0) + '%\uff09\uff0c\u7b26\u5408\u5df4\u83f2\u7279\u300c\u522b\u4eba\u6050\u60e7\u65f6\u8d2a\u5a6a\u300d'
-      });
-      items.push({
-        level: 'target',
-        levelLabel: '\ud83c\udfaf \u76ee\u6807\u4ef7',
-        action: '\u6b62\u76c8',
-        priceRange: sellTarget.toFixed(2),
-        position: '\u6b62\u76c8',
-        detail: '\u57fa\u4e8ePE' + fairPE + 'x\u4f30\u7b97\uff0c\u5bf9\u5e94\u4f30\u503c' + fairPrice.toFixed(2) + '\uff0c\u8f83\u73b0\u4ef7+' + ((sellTarget/price - 1) * 100).toFixed(1) + '%'
-      });
-      items.push({
-        level: 'stop',
-        levelLabel: '\ud83d\udd1b \u6b62\u635f\u4ef7',
-        action: '\u6b62\u635f',
-        priceRange: stopLoss.toFixed(2),
-        position: '\u6b62\u635f',
-        detail: '\u8dcc\u7834' + stopLoss.toFixed(2) + '\uff08-' + ((1 - stopLoss/price) * 100).toFixed(1) + '%\uff09\u5efa\u8bae\u6b62\u635f\uff0c\u4fdd\u62a4\u672c\u91d1'
-      });
-    } else if (overall === 'MARGINAL') {
-      items.push({
-        level: 'aggressive',
-        levelLabel: '\u6fc0\u8fdb\u578b',
-        action: '\u8f7b\u4ed3\u8bd5\u63a2',
-        priceRange: '\u2264 ' + price.toFixed(2),
-        position: '\u4e0d\u8d85\u8fc75%',
-        detail: '\u57fa\u672c\u9762\u9700\u786e\u8ba4\uff0c\u4ec5\u9002\u5408\u5c11\u91cf\u8bd5\u63a2\u3002\u5408\u7406\u4f30\u503c\u7ea6' + fairPrice.toFixed(2) + '\uff08PE' + fairPE + 'x\uff09'
-      });
-      items.push({
-        level: 'moderate',
-        levelLabel: '\u7a33\u5065\u578b',
-        action: '\u7b49\u5f85\u786e\u8ba4',
-        priceRange: '\u8d22\u62a5/\u4fe1\u53f7\u540e\u51b3\u5b9a',
-        position: '\u89c2\u671b',
-        detail: '\u9700\u8981\u66f4\u591a\u6570\u636e\u624d\u80fd\u505a\u51fa\u5224\u65ad\uff0c\u8010\u5fc3\u7b49\u5f85\u57fa\u672c\u9762\u6539\u5584\u4fe1\u53f7'
-      });
-      items.push({
-        level: 'conservative',
-        levelLabel: '\u4fdd\u5b88\u578b',
-        action: '\u4e0d\u53c2\u4e0e',
-        priceRange: '\u2014',
-        position: '0%',
-        detail: '\u4e0d\u7b26\u540810\u5e74\u786e\u5b9a\u6027\u6807\u51c6\uff0c\u8292\u683c\u300c\u5b81\u53ef\u9519\u8fc7\uff0c\u4e0d\u53ef\u4e70\u9519\u300d'
-      });
-    } else {
-      items.push({
-        level: 'aggressive',
-        levelLabel: '\u6fc0\u8fdb\u578b',
-        action: '\u4e0d\u53c2\u4e0e',
-        priceRange: '\u4efb\u4f55\u4ef7\u4f4d',
-        position: '0%',
-        detail: '\u57fa\u672c\u9762\u5b58\u5728\u660e\u786e\u7f3a\u9677\uff0c\u8292\u683c\u9006\u5411\u601d\u7ef4\uff1a\u975e\u4e00\u6d41\u516c\u53f8\u4e0d\u78b0'
-      });
-      items.push({
-        level: 'moderate',
-        levelLabel: '\u7a33\u5065\u578b',
-        action: '\u56de\u907f',
-        priceRange: '\u2014',
-        position: '0%',
-        detail: '\u4e0d\u7b26\u5408\u5df4\u83f2\u7279/\u6bb5\u6c38\u5e73\u7684\u597d\u516c\u53f8\u6807\u51c6'
-      });
-      items.push({
-        level: 'conservative',
-        levelLabel: '\u4fdd\u5b88\u578b',
-        action: '\u575a\u51b3\u56de\u907f',
-        priceRange: '\u2014',
-        position: '0%',
-        detail: '\u674e\u5f55\u539f\u5219\uff1a\u786e\u5b9a\u6027\u4e0d\u591f\u5c31\u662f\u4e0d\u786e\u5b9a\u6027\uff0c\u4e0d\u4e70'
-      });
-    }
-    return items;
-  }
-
-  /** 生成综合结论 */
-    /** 生成综合结论 */
-  private generateCommentary(overall: string, score: number, indicators: IndicatorResult[], masters: any, stockName: string): string {
-    const name = stockName || '';
-    const fails = indicators.filter(i => i.status === 'FAIL').length;
-    const passes = indicators.filter(i => i.status === 'PASS').length;
-    const noDatas = indicators.filter(i => i.status === 'NODATA').length;
-
-    let detail = '';
-    if (overall === 'PASS') {
-      detail = passes + '/7项通过，质量优秀';
-    } else if (overall === 'MARGINAL') {
-      detail = passes + '项通过、' + fails + '项未达标' + (noDatas > 0 ? '、' + noDatas + '项数据不足' : '');
-    } else {
-      detail = fails + '项不达标' + (noDatas > 0 ? '、' + noDatas + '项数据不足' : '');
-    }
-
-    const texts: Record<string, string> = {
-      PASS: '✅ ' + name + ' 通过AI Berkshire七项质量筛选，综合评分' + score + '分（满分105）。四大师平均' + masters.average + '分/5分。' + detail + '，具备基本面投资价值。',
-      MARGINAL: '⚠️ ' + name + ' 处于临界状态，综合评分' + score + '分（满分105）。四大师平均' + masters.average + '分/5分。' + detail + '，需结合详细财报进一步确认。',
-      FAIL: '❌ ' + name + ' 未通过质量筛选，综合评分' + score + '分（满分105）。四大师平均' + masters.average + '分/5分。' + detail + '，明确不符合一流公司标准，建议回避或等待基本面改善。',
+    return {
+      buffet: Math.min(5, baseScore + (indicators[0]?.status === "PASS" ? (failCount >= 2 ? 0 : 1) : 0)),
+      munger: Math.min(5, baseScore + (indicators[4]?.status === "PASS" ? (failCount >= 2 ? 0 : 1) : 0)),
+      duan: Math.min(5, baseScore + (indicators[3]?.status === "PASS" ? (failCount >= 2 ? 0 : 1) : 0)),
+      lulu: Math.min(5, baseScore + (indicators[6]?.status === "PASS" ? (failCount >= 2 ? 0 : 1) : 0)),
+      average: 0,
     };
-    return texts[overall] || '⚠️ 综合评分' + score + '分，四大师平均' + masters.average + '分/5分。';
+  }
+
+  // ===================== 策略生成 =====================
+
+  private generateStrategy(overall: string, indicators: IndicatorResult[], name: string): StrategyResult {
+    const failItems = indicators.filter(i => i.status === "FAIL");
+    const passItems = indicators.filter(i => i.status === "PASS");
+
+    if (overall === "PASS") {
+      return {
+        master: "巴菲特-芒格",
+        style: "质量达标——可继续深入",
+        description: `${name}通过了7项去劣筛选（快速排除通过）。若股价异动，可用 news-pulse 归因。值得深入时，再运行 investment-research 或 investment-team 做后续研究。`,
+        action: "watch",
+      };
+    } else if (overall === "MARGINAL") {
+      return {
+        master: "段永平-李录",
+        style: "边界通过——谨慎决策",
+        description: `${name}去劣筛选处于边界状态，建议用 news-pulse 监控异动。若认为结果值得深入，再运行 investment-research 或 investment-team 做后续研究。`, 
+        action: "watch",
+      };
+    } else {
+      const failReasons = failItems.map(i => i.name).join("、");
+      return {
+        master: "巴菲特-芒格",
+        style: "排除——不满足一流公司标准",
+        description: `${name}未通过去劣筛选（快速排除），问题指标: ${failReasons}。通常应停止研究。若发生重大股价异动，可用 news-pulse 归因判断是否有实质变化。`,
+        action: "avoid",
+      };
+    }
+  }
+
+  // ===================== 分层建议 =====================
+
+  private generateRecommendations(
+    overall: string,
+    indicators: IndicatorResult[],
+    info: any
+  ): RecommendationItem[] {
+    const price = info?.price || 0;
+    const pe = (info as any)?.pe || null;
+
+    if (overall === "PASS") {
+      return [
+        { level: "A", levelLabel: "值得继续", action: "运行 investment-research", priceRange: pe && pe < 15 ? "估值合理区间" : "等待估值回落", position: "不超过10%", detail: "质量达标，值得用四大师框架深入分析" },
+        { level: "B", levelLabel: "异动监控", action: "运行 news-pulse", priceRange: pe && pe < 20 ? "当前价附近" : "观望", position: "不超过5%", detail: "质量好，关注股价异动归因" },
+        { level: "C", levelLabel: "团队分析", action: "运行 investment-team", priceRange: "低于买入价15%", position: "清仓", detail: "让四角色并行分析确认" },
+      ];
+    } else if (overall === "MARGINAL") {
+      return [
+        { level: "A", levelLabel: "深入条件", action: "若值得→investment-research", priceRange: "等待更多信号", position: "0%", detail: "边界通过，仅当认为值得深入时运行" },
+        { level: "B", levelLabel: "异动监控", action: "运行 news-pulse", priceRange: price ? "当前价附近" : "N/A", position: "不超过3%", detail: "先用 news-pulse 归因判断是否有催化剂" },
+        { level: "C", levelLabel: "止损/回避", action: "回避", priceRange: price ? "当前价" : "N/A", position: "不持仓", detail: "质量存疑" },
+      ];
+    } else {
+      return [
+        { level: "A", levelLabel: "暂时排除", action: "停止研究", priceRange: "等待ROE/FCF改善", position: "0%", detail: "去劣筛选未通过，通常应停止研究" },
+        { level: "B", levelLabel: "异动监控", action: "运行 news-pulse", priceRange: "仅当股价剧烈波动时", position: "0%", detail: "发生重大异动时用 news-pulse 判断是否有实质变化" },
+        { level: "C", levelLabel: "止损/回避", action: "回避", priceRange: price ? "当前价" : "N/A", position: "不持仓", detail: "去劣筛选不通过" },
+      ];
+    }
+  }
+
+  // ===================== 评语生成 =====================
+
+  private generateCommentary(
+    name: string, code: string,
+    overall: string, indicators: IndicatorResult[],
+    exemptions: string[]
+  ): string {
+    const pass = indicators.filter(i => i.status === "PASS").length;
+    const fail = indicators.filter(i => i.status === "FAIL").length;
+    const marginal = indicators.filter(i => i.status === "MARGINAL").length;
+
+    const failNames = indicators.filter(i => i.status === "FAIL").map(i => i.name).join("、");
+    const marginalNames = indicators.filter(i => i.status === "MARGINAL").map(i => i.name).join("、");
+
+    let summary = `${name}(${code})在7项去劣指标中：${pass}项通过`;
+    if (marginal > 0) summary += `、${marginal}项边界`;
+    if (fail > 0) summary += `、${fail}项未通过`;
+    summary += "。";
+
+    if (overall === "PASS") summary += " 整体通过筛选，具备一流公司的基本财务特质。";
+    else if (overall === "MARGINAL") summary += ` 整体处于临界状态。${marginalNames ? "关注指标: " + marginalNames : ""}`;
+    else summary += ` 整体未通过筛选。问题指标: ${failNames}。`;
+
+    if (exemptions.length > 0) summary += " 触发" + exemptions.length + "项豁免规则。";
+
+    summary += " ｜AI Berkshire 流程：先用 /quality-screen 快速排除 → 股价异动时用 /news-pulse 归因 → 值得深入时用 /investment-research 或 $investment-team 继续研究。注意：去劣筛选仅评估财务指标，不评估管理层。需另用 management-deep-dive 评估管理层。";
+
+    return summary;
+  }
+
+  // ===================== 手动重算 =====================
+
+  async recalculate(code: string): Promise<QualityResult> {
+    const result = await this.autoAssess(code);
+    return result;
   }
 }
