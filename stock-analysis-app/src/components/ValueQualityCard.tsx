@@ -172,12 +172,14 @@ const ValueQualityCard: React.FC<Props> = ({ data, loading, newsPulse, newsPulse
       title={
         <span>
           🏛️ AI Berkshire 价值质量评估
+          <Tooltip title={"⚠️ 此评分基于7项财务指标的去劣筛选，仅评估财务健康度，非买入建议。高分不代表股价会上涨，还需结合估值、行业周期、技术面综合判断。官方阈值：ROE≥8%、毛利率≥15%、净利率≥5%、OCF/NI≥0.7"}>
           <Tag
             color={overallColor(qualityData.overall)}
-            style={{ marginLeft: 8, fontWeight: "bold" }}
+            style={{ marginLeft: 8, fontWeight: "bold", cursor: "help" }}
           >
             {overallLabel(qualityData.overall)} {qualityData.totalScore}/105
           </Tag>
+        </Tooltip>
         </span>
       }
       style={{ marginBottom: 12, borderLeft: `3px solid ${overallColor(qualityData.overall)}` }}
@@ -201,40 +203,24 @@ const ValueQualityCard: React.FC<Props> = ({ data, loading, newsPulse, newsPulse
         <div style={{ fontSize: 12, color: "#666", marginBottom: 8, lineHeight: 1.6 }}>
           {qualityData.commentary}
         </div>
+        <div style={{ fontSize: 10, color: "#999", marginBottom: 4, lineHeight: 1.4 }}>
+          ⚠️ 排除标准：≥2项FAIL直接排除 | 分数仅反映各指标得分，不代表整体结论
+        </div>
 
         {/* 7项指标 */}
         <div style={{ fontSize: 12, color: "#999", marginBottom: 4 }}>
-          七项质量筛选指标
+          七项质量筛选（紧凑版）
         </div>
-        {qualityData.indicators.map((ind) => (
-          <Row key={ind.id} gutter={[4, 4]} style={{ marginBottom: 2, alignItems: "center" }}>
-            <Col span={1} style={{ textAlign: "center" }}>
-              {statusIcon(ind.status)}
-            </Col>
-            <Col span={5}>
-              <span style={{ fontSize: 12 }}>{ind.name}</span>
-            </Col>
-            <Col span={3}>
-              <span style={{ fontSize: 12, color: "#999" }}>
-                {ind.value !== null ? ind.value + (ind.unit || "") : "—"}
-              </span>
-            </Col>
-            <Col span={10}>
-              <Progress
-                percent={Math.min(100, (ind.score / 15) * 100)}
-                size="small"
-                showInfo={false}
-                strokeColor={statusColor(ind.status)}
-                style={{ margin: 0 }}
-              />
-            </Col>
-            <Col span={5}>
-              <Tag color={statusColor(ind.status)} style={{ fontSize: 11, margin: 0 }}>
-                {ind.status === "PASS" ? "通过" : ind.status === "FAIL" ? "未通过" : ind.status === "MARGINAL" ? "临界" : "数据不足"}
-              </Tag>
-            </Col>
-          </Row>
-        ))}
+        {qualityData.indicators.map((ind) => {
+            const c = ind.status === "PASS" ? "#52c41a" : ind.status === "FAIL" ? "#cf1322" : ind.status === "MARGINAL" ? "#faad14" : "#999";
+            return <div key={ind.id} style={{ padding: "2px 6px", borderRadius: 3, fontSize: 11, border: "1px solid " + c, background: c + "15", display: "inline-flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontWeight: 600, color: c, fontSize: 12 }}>{ind.status === "PASS" ? "✓" : ind.status === "FAIL" ? "✗" : ind.status === "MARGINAL" ? "~" : "?"}</span>
+              <span style={{ color: "#444" }}>{ind.name}</span>
+              <span style={{ color: c, fontWeight: 600 }}>{ind.score}/15</span>
+              <span style={{ color: "#888" }}>{ind.value !== null ? ind.value + (ind.unit || "") : "—"}</span>
+            </div>;
+          })}
+
 
         {/* 豁免条件 */}
         {qualityData.exemptions && qualityData.exemptions.length > 0 && (
@@ -421,51 +407,43 @@ const ValueQualityCard: React.FC<Props> = ({ data, loading, newsPulse, newsPulse
               </div>
             </div>
           )}
-
-          {/* 分层操作建议 */}
-          {qualityData.recommendations && qualityData.recommendations.length > 0 && (
-            <div>
-              <div style={{ fontSize: 12, color: "#999", marginBottom: 4 }}>分层操作建议</div>
-              {qualityData.recommendations.map((rec, i) => (
-                <div key={i} style={{
-                  padding: "5px 8px",
-                  background: i === 0 ? "#f6ffed" : i === 2 ? "#fff2f0" : "#fffbe6",
-                  borderRadius: 4, marginBottom: 3,
-                  border: "1px solid " + (i === 0 ? "#b7eb8f" : i === 2 ? "#ffa39e" : "#ffe58f")
-                }}>
-                  <Row gutter={[0, 0]} align="middle">
-                    <Col span={4}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "#333" }}>{rec.levelLabel}</span>
-                    </Col>
-                    <Col span={4}>
-                      {rec.action !== "止盈" && rec.action !== "止损" ? (
-                        <Tag color={rec.action === "止盈" ? "blue" : rec.action === "止损" ? "volcano" : rec.action.includes("不") || rec.action.includes("回避") ? "red" : rec.action.includes("买入") || rec.action.includes("建仓") ? "green" : "orange"} style={{ fontSize: 10 }}>
-                          {rec.action}
-                        </Tag>
-                      ) : (
-                        <span style={{ fontSize: 11, fontWeight: 600, color: rec.action === "止盈" ? "#1677ff" : "#e84749" }}>{rec.action}</span>
-                      )}
-                    </Col>
-                    <Col span={5}>
-                      <span style={{ fontSize: 10, color: "#666" }}>{rec.priceRange}</span>
-                    </Col>
-                    <Col span={4}>
-                      <span style={{ fontSize: 10, color: "#1677ff", fontWeight: 500 }}>{rec.position}</span>
-                    </Col>
-                    <Col span={7}>
-                      <Tooltip title={rec.detail}>
-                        <span style={{ fontSize: 10, color: "#999", cursor: "help", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", maxWidth: 110 }}>
-                          {rec.detail}
-                        </span>
-                      </Tooltip>
-                    </Col>
-                  </Row>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
+
+          {qualityData.recommendations && qualityData.recommendations.length > 0 && (
+            <div style={{ marginTop: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#333", marginBottom: 6 }}>💰 分层买卖建议</div>
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#fafafa" }}>
+                    <th style={{ padding: "6px 8px", border: "1px solid #f0f0f0", textAlign: "left", fontWeight: 600, color: "#333" }}>策略</th>
+                    <th style={{ padding: "6px 8px", border: "1px solid #f0f0f0", textAlign: "left", fontWeight: 600, color: "#333" }}>建议</th>
+                    <th style={{ padding: "6px 8px", border: "1px solid #f0f0f0", textAlign: "left", fontWeight: 600, color: "#333" }}>价格区间</th>
+                    <th style={{ padding: "6px 8px", border: "1px solid #f0f0f0", textAlign: "left", fontWeight: 600, color: "#333" }}>仓位</th>
+                    <th style={{ padding: "6px 8px", border: "1px solid #f0f0f0", textAlign: "left", fontWeight: 600, color: "#333" }}>说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {qualityData.recommendations.map((rec, i) => {
+                    const rowColors = ["#f6ffed", "#e6f7ff", "#fffbe6"];
+                    const labelColors = ["#389e0d", "#096dd9", "#d48806"];
+                    return (
+                      <tr key={i} style={{ background: rowColors[i] }}>
+                        <td style={{ padding: "6px 8px", border: "1px solid #f0f0f0", fontWeight: 700, color: labelColors[i] }}>
+                          {i === 0 ? "🟢 激进型" : i === 1 ? "🔵 稳健型" : "🟠 保守型"}
+                        </td>
+                        <td style={{ padding: "6px 8px", border: "1px solid #f0f0f0", color: "#333", fontWeight: 500 }}>{rec.action}</td>
+                        <td style={{ padding: "6px 8px", border: "1px solid #f0f0f0", color: labelColors[i], fontWeight: 600 }}>{rec.priceRange}</td>
+                        <td style={{ padding: "6px 8px", border: "1px solid #f0f0f0", color: labelColors[i], fontWeight: 600, textAlign: "center" }}>{rec.position}</td>
+                        <td style={{ padding: "6px 8px", border: "1px solid #f0f0f0", color: "#888", fontSize: 11 }}>{rec.detail}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
 
       {/* ========== 流程指示条 ========== */}
       <div style={{
@@ -485,7 +463,45 @@ const ValueQualityCard: React.FC<Props> = ({ data, loading, newsPulse, newsPulse
         </Tag>
       </div>
 
-      {/* ========== 最终结论 ========== */}
+      {/* ========== 决策表 + 最终结论 ========== */}
+      {/* 决策表 */}
+      <div style={{ marginBottom: 10, padding: "8px 10px", background: "#f9fafb", borderRadius: 6, border: "1px solid #e8e8e8" }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: "#333", marginBottom: 6 }}>📊 综合决策表</div>
+        <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+          <tbody>
+            <tr style={{ background: qualityData.overall === "FAIL" ? "#fff2f0" : qualityData.overall === "PASS" ? "#f6ffed" : "#fffbe6" }}>
+              <td style={{ padding: "4px 6px", fontWeight: 600, color: "#333", borderBottom: "1px solid #f0f0f0", width: "80px" }}>空仓者</td>
+              <td style={{ padding: "4px 6px", color: "#555", borderBottom: "1px solid #f0f0f0" }}>
+                {qualityData.overall === "PASS" ? "质量合格，可用 investment-research 深入分析后建仓，建议不超过10%仓位" :
+                 qualityData.overall === "MARGINAL" ? "边界通过，建议等待更多信号，仅可建仓不超过3%" :
+                 "质量不达标，建议不建仓"}
+              </td>
+            </tr>
+            <tr style={{ background: qualityData.overall === "FAIL" ? "#fff2f0" : qualityData.overall === "PASS" ? "#f6ffed" : "#fffbe6" }}>
+              <td style={{ padding: "4px 6px", fontWeight: 600, color: "#333", borderBottom: "1px solid #f0f0f0" }}>持仓者</td>
+              <td style={{ padding: "4px 6px", color: "#555", borderBottom: "1px solid #f0f0f0" }}>
+                {qualityData.overall === "PASS" ? "持有。若股价异动用 news-pulse 归因，不因短期波动丢掉好公司" :
+                 qualityData.overall === "MARGINAL" ? "边界通过，建议减仓至不超过3%，等待质量改善" :
+                 "质量不达标，建议清仓"}
+              </td>
+            </tr>
+            <tr style={{ background: qualityData.overall === "FAIL" ? "#fff2f0" : qualityData.overall === "PASS" ? "#f6ffed" : "#fffbe6" }}>
+              <td style={{ padding: "4px 6px", fontWeight: 600, color: "#333", borderBottom: "1px solid #f0f0f0" }}>卖出信号</td>
+              <td style={{ padding: "4px 6px", color: "#555", borderBottom: "1px solid #f0f0f0" }}>
+                {qualityData.overall === "FAIL" ? "已触发排除，建议 입立即清仓" :
+                 "当股价距离买入价下跌30%以上且质量指标恶化时清仓"}
+              </td>
+            </tr>
+            <tr style={{ background: qualityData.overall === "FAIL" ? "#fff2f0" : qualityData.overall === "PASS" ? "#f6ffed" : "#fffbe6" }}>
+              <td style={{ padding: "4px 6px", fontWeight: 600, color: "#333" }}>加仓信号</td>
+              <td style={{ padding: "4px 6px", color: "#555" }}>
+                {qualityData.overall === "PASS" ? "股价回调至估值合理区间下缘且质量仍然达标时加仓" :
+                 "暂无加仓信号，等待质量改善"}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div style={{
         padding: "10px 12px", borderRadius: 8,
         background: qualityData.overall === "PASS" ? "#f6ffed" : qualityData.overall === "FAIL" ? "#fff2f0" : "#fffbe6",

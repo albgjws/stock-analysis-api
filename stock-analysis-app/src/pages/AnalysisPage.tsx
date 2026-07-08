@@ -435,6 +435,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
 
       <ValueQualityCard data={valueQuality} loading={valueQualityLoading} newsPulse={newsPulse} newsPulseLoading={newsPulseLoading} onRefresh={() => fetchValueQuality(true)} />
 
+      {/* AI Berkshire 投资框架说明 */}
+      
+
       {/* K线图 — 仅当有K线数据时显示 */}
       {hasKline ? (
         <KlineChart

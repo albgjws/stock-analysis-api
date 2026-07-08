@@ -99,28 +99,24 @@ export class ValueQualityService {
     } catch {}
   }
 
-  async assess(code: string): Promise<ValueQualityResponse> {
+    async assess(code: string): Promise<ValueQualityResponse> {
     const cleanCode = code.replace(/^(sh|sz|bj|hk)/, "");
-    const filePath = path.join(this.dataDir, cleanCode + ".json");
 
-    // 检查是否存在已保存的结果
-    try {
-      if (fs.existsSync(filePath)) {
-        const raw = fs.readFileSync(filePath, "utf-8");
-        return JSON.parse(raw) as QualityResult;
-      }
-    } catch (err: any) {
-      console.warn(`[ValueQuality] Failed to read cached: ${err.message}`);
-    }
-
-    // 无缓存 -> 自动抓取数据并执行评估
+    // 每次打开股票都重新评估（不读缓存）
     console.log(`[ValueQuality] Auto-assessing ${cleanCode}...`);
     try {
       const result = await this.autoAssess(code);
       return result;
     } catch (err: any) {
       console.error(`[ValueQuality] Auto-assess failed: ${err.message}`);
-      // 降级：返回无结果提示
+      const filePath = path.join(this.dataDir, cleanCode + ".json");
+      try {
+        if (fs.existsSync(filePath)) {
+          const raw = fs.readFileSync(filePath, "utf-8");
+          console.log(`[ValueQuality] Fall back to cached for ${cleanCode}`);
+          return JSON.parse(raw) as QualityResult;
+        }
+      } catch {}
       let name = "";
       try {
         const info = await this.dataService.getStockInfo(code);
@@ -134,8 +130,7 @@ export class ValueQualityService {
       };
     }
   }
-
-  async saveResult(code: string, result: QualityResult): Promise<void> {
+async saveResult(code: string, result: QualityResult): Promise<void> {
     const cleanCode = code.replace(/^(sh|sz|bj|hk)/, "");
     const filePath = path.join(this.dataDir, cleanCode + ".json");
     try {
@@ -154,7 +149,12 @@ export class ValueQualityService {
 
   async autoAssess(code: string): Promise<QualityResult> {
     const cleanCode = code.replace(/^(sh|sz|bj|hk)/, "");
-    const market = code.startsWith("sh") ? "1" : "0";
+    const prefix = code.slice(0, 2);
+    const rawCode = cleanCode;
+    const market = prefix === "sh" ? "1" :
+                  prefix === "sz" ? "0" :
+                  prefix === "bj" ? "0" :
+                  rawCode.startsWith("6") || rawCode.startsWith("9") ? "1" : "0";
 
     // 1. 获取股票基本信息
     let name = cleanCode;
@@ -179,7 +179,7 @@ export class ValueQualityService {
     const marginalCount = indicators.filter(i => i.status === "MARGINAL").length;
     const totalScore = indicators.reduce((s, i) => s + i.score, 0);
 
-    // 官方去劣筛选逻辑：FAIL >= 2 直接排除；FAIL = 1 边界通过(需豁免)；全部通过或仅微量边界为通过
+    // 去劣筛选：FAIL >= 2 直接排除；FAIL = 1 边界通过；全部通过或仅微量边界为通过
     const overall: "PASS" | "MARGINAL" | "FAIL" =
       failCount >= 2 ? "FAIL" :
       failCount === 1 ? "MARGINAL" :
@@ -550,23 +550,49 @@ export class ValueQualityService {
     const price = info?.price || 0;
     const pe = (info as any)?.pe || null;
 
+    // 计算具体价格区间
+    const aggrLow = price > 0 ? (price * 0.95).toFixed(2) : "—";
+    const aggrHigh = price > 0 ? (price * 1.05).toFixed(2) : "—";
+    const stabLow = price > 0 ? (price * 0.85).toFixed(2) : "—";
+    const stabHigh = price > 0 ? (price * 0.95).toFixed(2) : "—";
+    const consLow = price > 0 ? (price * 0.75).toFixed(2) : "—";
+    const consHigh = price > 0 ? (price * 0.85).toFixed(2) : "—";
+
     if (overall === "PASS") {
       return [
-        { level: "A", levelLabel: "值得继续", action: "运行 investment-research", priceRange: pe && pe < 15 ? "估值合理区间" : "等待估值回落", position: "不超过10%", detail: "质量达标，值得用四大师框架深入分析" },
-        { level: "B", levelLabel: "异动监控", action: "运行 news-pulse", priceRange: pe && pe < 20 ? "当前价附近" : "观望", position: "不超过5%", detail: "质量好，关注股价异动归因" },
-        { level: "C", levelLabel: "团队分析", action: "运行 investment-team", priceRange: "低于买入价15%", position: "清仓", detail: "让四角色并行分析确认" },
+        { level: "A", levelLabel: "激进型", action: "当前价位可建仓",
+          priceRange: "￥" + aggrLow + " ~ ￥" + aggrHigh, position: "不超过10%",
+          detail: "质量达标，当前价位可少量建仓，细化分析后再决定是否增仓" },
+        { level: "B", levelLabel: "稳健型", action: "等回调后建仓",
+          priceRange: "￥" + stabLow + " ~ ￥" + stabHigh, position: "不超过5%",
+          detail: "等股价回调9-15%后建仓，获得更好安全边际" },
+        { level: "C", levelLabel: "保守型", action: "等深度回调",
+          priceRange: "￥" + consLow + " ~ ￥" + consHigh, position: "不超过3%",
+          detail: "仅当股价深度回调15-25%时考虑建仓，否则等待" },
       ];
     } else if (overall === "MARGINAL") {
       return [
-        { level: "A", levelLabel: "深入条件", action: "若值得→investment-research", priceRange: "等待更多信号", position: "0%", detail: "边界通过，仅当认为值得深入时运行" },
-        { level: "B", levelLabel: "异动监控", action: "运行 news-pulse", priceRange: price ? "当前价附近" : "N/A", position: "不超过3%", detail: "先用 news-pulse 归因判断是否有催化剂" },
-        { level: "C", levelLabel: "止损/回避", action: "回避", priceRange: price ? "当前价" : "N/A", position: "不持仓", detail: "质量存疑" },
+        { level: "A", levelLabel: "激进型", action: "边界通过，仅可试仓",
+          priceRange: "￥" + aggrLow + " ~ ￥" + aggrHigh, position: "不超过3%",
+          detail: "边界通过，仅当认为值得深入时可少量试仓" },
+        { level: "B", levelLabel: "稳健型", action: "等回调后再看",
+          priceRange: "￥" + stabLow + " ~ ￥" + stabHigh, position: "不超过2%",
+          detail: "等股价回调后用 news-pulse 判断是否有催化剂" },
+        { level: "C", levelLabel: "保守型", action: "暂时观望",
+          priceRange: "踢价回调超过25%时", position: "不持仓",
+          detail: "质量存疑，建议等待更多确定性信号" },
       ];
     } else {
       return [
-        { level: "A", levelLabel: "暂时排除", action: "停止研究", priceRange: "等待ROE/FCF改善", position: "0%", detail: "去劣筛选未通过，通常应停止研究" },
-        { level: "B", levelLabel: "异动监控", action: "运行 news-pulse", priceRange: "仅当股价剧烈波动时", position: "0%", detail: "发生重大异动时用 news-pulse 判断是否有实质变化" },
-        { level: "C", levelLabel: "止损/回避", action: "回避", priceRange: price ? "当前价" : "N/A", position: "不持仓", detail: "去劣筛选不通过" },
+        { level: "A", levelLabel: "激进型", action: "暂不建仓",
+          priceRange: "—", position: "0%",
+          detail: "去劣筛选未通过，通常应停止研究" },
+        { level: "B", levelLabel: "稳健型", action: "等待质量改善",
+          priceRange: "—", position: "0%",
+          detail: "等 ROE/FCF/毛利率等核心指标改善后再评估" },
+        { level: "C", levelLabel: "保守型", action: "彻底观望",
+          priceRange: "仅当股价剧烈波动时", position: "不持仓",
+          detail: "发生重大异动时用 news-pulse 判断是否有实质变化" },
       ];
     }
   }
