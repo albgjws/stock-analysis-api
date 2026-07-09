@@ -205,7 +205,7 @@ router.get('/:code/analysis', async (req: Request, res: Response, next: NextFunc
     if (kline.length >= 20) {
       try {
         const analysisKline = kline.slice(-120);
-        signals = signalService.generateSignals(analysisKline);
+        signals = signalService.generateSignals(analysisKline, prediction.trend);
       } catch {
         console.warn(`[Analysis] Signal generation failed for ${code}`);
       }

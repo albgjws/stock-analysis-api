@@ -8,6 +8,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons';
 import type { MarketRecapResult, RecapSection } from '../utils/marketRecap';
+import { isMarketOpen } from '../utils/marketRecap';
 
 const { Text } = Typography;
 
@@ -124,7 +125,7 @@ export default function MarketRecap({ recap, loading }: MarketRecapProps) {
     <Card
       title={
         <span style={{ fontSize: 16, fontWeight: 'bold' }}>
-          📊 当日专业复盘
+          {isMarketOpen() ? '📊 盘中实时分析' : '📊 当日收盘点评'}
         </span>
       }
       style={{

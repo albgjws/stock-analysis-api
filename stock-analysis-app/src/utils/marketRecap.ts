@@ -17,7 +17,7 @@ export interface MarketRecapResult {
 }
 
 /** 判断A股交易时段 */
-function isMarketOpen(): boolean {
+export function isMarketOpen(): boolean {
   const now = new Date();
   const h = now.getHours();
   const m = now.getMinutes();
@@ -31,7 +31,7 @@ function isMarketOpen(): boolean {
 }
 
 /** 判断是否收盘 */
-function isMarketClosed(): boolean {
+export function isMarketClosed(): boolean {
   return new Date().getHours() >= 15;
 }
 
@@ -572,8 +572,9 @@ export function generateMarketRecap(
   }
 
   const isPositiveDay = info.changePercent >= 0;
+  const isOpen = isMarketOpen();
   const summary: RecapSection = {
-    title: '今日行情综述',
+    title: isOpen ? '盘中实时动态' : '今日收盘点评',
     icon: isPositiveDay ? '📈' : '📉',
     type: isPositiveDay ? 'positive' : 'negative',
     content: summaryLines,
@@ -621,6 +622,11 @@ export function generateMarketRecap(
   let realtime: RecapSection | undefined;
   if (intraday && intraday.data && intraday.data.length > 0) {
     realtime = generateRealtimeAnalysis(intraday, info, signals, lastRefresh);
+  }
+
+  // 盘中特别提示：收盘前补充说明
+  if (isOpen && realtime) {
+    realtime.content.push(isMarketClosed() ? '✅ 今日交易已结束，以上为完整收盘回顾' : '⏳ 交易进行中，以上数据实时更新，收盘后将生成完整点评');
   }
 
   return { summary, technical, operation, outlook, realtime };

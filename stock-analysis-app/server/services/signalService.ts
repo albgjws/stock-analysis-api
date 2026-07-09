@@ -5,7 +5,7 @@ export class SignalService {
    * Generate buy/sell signals based on technical indicators
    * Uses a weighted voting system combining multiple indicators
    */
-  generateSignals(klineData: KlineBar[]): SignalResult {
+  generateSignals(klineData: KlineBar[], trend?: string): SignalResult {
     if (!klineData || klineData.length < 20) {
       return {
         overall: 'HOLD',
@@ -67,6 +67,33 @@ export class SignalService {
       details.push(volumeSignal);
       totalScore += volumeSignal.score;
     }
+
+    // 7. Prediction Trend Signal（来自 ARIMA/线性回归的统计预测）
+    if (trend === "down") {
+      details.push({
+        indicator: "预测趋势",
+        signal: "SELL",
+        score: -1,
+        description: "趋势预测模型显示后市下跌，叠加 -1 分",
+      });
+      totalScore -= 1;
+    } else if (trend === "up") {
+      details.push({
+        indicator: "预测趋势",
+        signal: "BUY",
+        score: 1,
+        description: "趋势预测模型显示后市上涨，叠加 +1 分",
+      });
+      totalScore += 1;
+    } else if (trend === "sideways") {
+      details.push({
+        indicator: "预测趋势",
+        signal: "HOLD",
+        score: 0,
+        description: "趋势预测模型显示后市震荡，不影响综合评分",
+      });
+    }
+    // trend undefined 时不添加预测趋势信号
 
     // Calculate key levels
     const { support, resistance } = this.calculateKeyLevels(klineData);
