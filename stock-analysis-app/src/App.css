@@ -140,22 +140,6 @@ body {
 }
 
 
-
-
-/* ============ 页签滚动修复 ============ */
-/* 让页签栏可横向滚动，显示滚动条，禁止 JS 自动回跳 */
-.ant-tabs-nav-wrap {
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
-  scrollbar-width: thin;
-  scroll-behavior: auto !important;
-}
-.ant-tabs-nav-wrap .ant-tabs-nav-list {
-  overflow: visible !important;
-}
-.ant-tabs-nav-operations {
-  display: none !important;
-}
 .ant-tabs-ink-bar {
   transition-duration: 0s !important;
 }

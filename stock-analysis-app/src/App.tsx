@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import { Tabs } from 'antd';
 import { Routes, Route } from 'react-router-dom';
 import AppLayout from './components/Layout';
@@ -37,6 +37,27 @@ const TabLabel = React.memo(function TabLabel({ tab, idx, onMove, dragRef: dr }:
 function AppContent() {
   const { tabs, activeKey, addTab, removeTab, switchTab, moveTab, quoteMap } = useTabContext();
   const dragRef = useRef<number | null>(null);
+
+  // 鼠标滚轮横向滚动页签（Ant Design 用 transform 管理位置，需调整 nav-list 偏移）
+  useEffect(() => {
+    const wrap = document.querySelector('.ant-tabs-nav-wrap') as HTMLElement;
+    if (!wrap) return;
+    const handler = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      const list = wrap.querySelector('.ant-tabs-nav-list') as HTMLElement;
+      if (!list) return;
+      const match = list.style.transform?.match(/translateX\(([-\d.]+)px\)/);
+      const curX = match ? parseFloat(match[1]) : 0;
+      const maxScroll = Math.max(0, list.scrollWidth - wrap.clientWidth);
+      const newX = Math.min(0, Math.max(-maxScroll, curX - e.deltaY));
+      if (newX !== curX) {
+        list.style.transform = 'translateX(' + newX + 'px)';
+        e.preventDefault();
+      }
+    };
+    wrap.addEventListener('wheel', handler, { passive: false });
+    return () => wrap.removeEventListener('wheel', handler);
+  }, [tabs.length]);
 
   const onEdit = (targetKey: React.MouseEvent | React.KeyboardEvent | string, action: 'add' | 'remove') => {
     if (action === 'remove') removeTab(targetKey as string);
@@ -82,7 +103,7 @@ function AppContent() {
         hideAdd
         size="small"
         style={{ marginTop: -8 }}
-        tabBarStyle={{ marginBottom: 12, userSelect: 'none', overflow: 'auto' }}
+        tabBarStyle={{ marginBottom: 12, userSelect: 'none' }}
         items={tabItems}
       />
     </AppLayout>
