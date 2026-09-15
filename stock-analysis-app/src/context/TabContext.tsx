@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 export interface StockTab {
   code: string;
@@ -24,10 +24,49 @@ interface TabContextValue {
 
 const TabContext = createContext<TabContextValue>(null!);
 
+/** 标签页持久化 key（增删/排序/切换都会写入 localStorage，刷新后恢复） */
+const STORAGE_KEY = 'stock-analysis:tabs:v1';
+
+interface PersistedState {
+  tabs: StockTab[];
+  activeKey: string;
+}
+
+/** 从 localStorage 读取上次的标签状态，做健壮性校验 */
+function loadPersistedState(): PersistedState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { tabs: [], activeKey: 'home' };
+    const parsed = JSON.parse(raw);
+    const tabs: StockTab[] = Array.isArray(parsed?.tabs)
+      ? parsed.tabs.filter(
+          (t: any) => t && typeof t.code === 'string' && typeof t.name === 'string'
+        )
+      : [];
+    let activeKey: string =
+      typeof parsed?.activeKey === 'string' ? parsed.activeKey : 'home';
+    // activeKey 必须仍然有效，否则回退
+    if (activeKey !== 'home' && !tabs.some(t => t.code === activeKey)) {
+      activeKey = tabs.length > 0 ? tabs[0].code : 'home';
+    }
+    return { tabs, activeKey };
+  } catch {
+    return { tabs: [], activeKey: 'home' };
+  }
+}
+
 export function TabProvider({ children }: { children: React.ReactNode }) {
-  const [tabs, setTabs] = useState<StockTab[]>([]);
-  const [activeKey, setActiveKey] = useState<string>('home');
+  const [initial] = useState(loadPersistedState);
+  const [tabs, setTabs] = useState<StockTab[]>(initial.tabs);
+  const [activeKey, setActiveKey] = useState<string>(initial.activeKey);
   const [quoteMap, setQuoteMap] = useState<Record<string, TabQuote>>({});
+
+  // 标签增删、排序、切换时持久化（quoteMap 不持久化，实时行情会自行刷新）
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ tabs, activeKey }));
+    } catch {}
+  }, [tabs, activeKey]);
 
   const updateQuote = useCallback((code: string, quote: TabQuote) => {
     setQuoteMap(prev => ({ ...prev, [code]: quote }));
