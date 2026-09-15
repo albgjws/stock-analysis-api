@@ -72,12 +72,11 @@ function AppContent() {
     },
     ...tabs.map((tab, idx) => ({
       key: tab.code,
+      // 常驻挂载：刷新后所有标签都会查询，而非只有当前标签
+      forceRender: true,
       label: <TabLabel tab={tab} idx={idx} onMove={moveTab} dragRef={dragRef} />,
       children: (
-        <AnalysisPage
-          code={tab.code}
-          isActive={activeKey === tab.code}
-        />
+        <AnalysisPage code={tab.code} />
       ),
       closable: true,
     })),

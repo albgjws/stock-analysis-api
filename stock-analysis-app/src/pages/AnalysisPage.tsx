@@ -36,13 +36,11 @@ import QuantitativePanel from '../components/QuantitativePanel';
 
 interface AnalysisPageProps {
   code?: string;
-  isActive?: boolean;
 }
 
-export default function AnalysisPage({ code: propCode, isActive: propIsActive }: AnalysisPageProps) {
+export default function AnalysisPage({ code: propCode }: AnalysisPageProps) {
   const { code: paramCode } = useParams<{ code: string }>();
   const code = propCode || paramCode;
-  const isActive = propIsActive ?? true;
   const { addTab, updateQuote } = useTabContext();
 
   const { data, loading, error, isNotFound, retry } = useStockAnalysis(code);
@@ -163,9 +161,9 @@ export default function AnalysisPage({ code: propCode, isActive: propIsActive }:
     });
   }, [code]);
 
-  // 自动轮询：盘中实时分析频率更高，非交易时段不轮询行情
-  usePolling(fetchIntraday, isActive && !!code ? 15000 : null, isActive, true);
-  usePolling(fetchFundFlow, isActive && !!code ? 60000 : null, isActive, false);
+  // 自动轮询：所有已打开的标签都参与轮询（不受是否激活限制）
+  usePolling(fetchIntraday, !!code ? 15000 : null, true, true);
+  usePolling(fetchFundFlow, !!code ? 60000 : null, true, false);
 
   usePolling(fetchQuote, !!code ? 5000 : null, true, true);
 
