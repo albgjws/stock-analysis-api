@@ -405,6 +405,13 @@ export default function AnalysisPage({ code: propCode }: AnalysisPageProps) {
         </div>
       )}
 
+      {/* 新股 / K线样本不足提示 */}
+      {hasKline && kline.length < 26 && (
+        <div style={{ marginBottom: 12, padding: '8px 16px', background: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 6, fontSize: 13, color: '#1d39c4' }}>
+          ℹ️ 该股上市（或复牌）时间较短，目前只有 {kline.length} 个交易日的K线数据，均线、MACD、布林带、KDJ 等技术指标暂不可用，下方评分与信号参考价值有限。
+        </div>
+      )}
+
       {/* 股票概览 */}
       <StockOverview info={liveInfo} profile={stockProfile} />
 

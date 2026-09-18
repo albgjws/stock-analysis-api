@@ -904,8 +904,12 @@ export class StockDataService {
       const json = await resp.json() as any;
       const data = json?.data || json?.Result;
       if (data) {
-        result.industry = data.f86 || data.f85 || '';
-        result.region = data.f124 || '';
+        // push2 的 f86/f85 在部分情况下返回数值（总市值/净资产），只有非纯数字才算行业名
+        const notNumeric = (v: any) => typeof v === 'string' && v.trim() !== '' && !/^[\d.,\-+]+$/.test(v.trim());
+        const push2Industry = notNumeric(data.f86) ? data.f86.trim() : '';
+        if (push2Industry && !result.industry) result.industry = push2Industry;
+        const push2Region = notNumeric(data.f124) ? data.f124.trim() : '';
+        if (push2Region && !result.region) result.region = push2Region;
         if (data.f121) {
           const names = String(data.f121).split(',');
           const codes = data.f122 ? String(data.f122).split(',') : [];

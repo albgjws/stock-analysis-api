@@ -239,7 +239,7 @@ const fundFlowBarData = (fundFlow && fundFlow.length > 0 && showAdvanced)
             if (p.seriesName.startsWith('MA') && p.value != null) html += `<div>${p.seriesName}: <b>${Number(p.value).toFixed(2)}</b></div>`;
           });
           // 技术指标
-          if (d.macd) {
+          if (d.macd && d.macd.dif != null && d.macd.dea != null && d.macd.macd != null) {
             html += `<div style="border-top:1px solid #eee;margin:4px 0 2px;font-size:11px;color:#999;">MACD</div>`;
             html += `<div><span style="color:#1677ff">DIF</span>: <b>${d.macd.dif.toFixed(2)}</b> | <span style="color:#faad14">DEA</span>: <b>${d.macd.dea.toFixed(2)}</b> | MACD: <b style="color:${d.macd.macd >= 0 ? '#cf1322' : '#3cb371'}">${d.macd.macd.toFixed(2)}</b></div>`;
           }
@@ -248,7 +248,7 @@ const fundFlowBarData = (fundFlow && fundFlow.length > 0 && showAdvanced)
             if (d.rsi.rsi14 != null) html += ` | RSI(14): <b>${d.rsi.rsi14.toFixed(1)}</b>`;
             html += `</div>`;
           }
-          if (d.kdj) {
+          if (d.kdj && d.kdj.k != null && d.kdj.d != null && d.kdj.j != null) {
             html += `<div><span style="color:#1677ff">K</span>: <b>${d.kdj.k.toFixed(1)}</b> | <span style="color:#faad14">D</span>: <b>${d.kdj.d.toFixed(1)}</b> | <span style="color:#ff4d4f">J</span>: <b>${d.kdj.j.toFixed(1)}</b></div>`;
           }
           // 信号标记提示

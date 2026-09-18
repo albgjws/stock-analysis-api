@@ -164,7 +164,8 @@ function generateRealtimeAnalysis(intraday: IntradayData, info: StockInfo, signa
   const events = detectIntradayEvents(intraday, intraday.preClose);
   const closed = new Date().getHours() >= 15;
   const timeTag = lastRefresh ? ` [${lastRefresh}]` : '';
-  lines.push(`${closed ? '收盘' : '最新'}价 ${info.price.toFixed(2)}，${info.changePercent >= 0 ? '上涨' : '下跌'} ${Math.abs(info.changePercent).toFixed(2)}%${timeTag}`);
+  const rtChg = info.changePercent ?? 0;
+  lines.push(`${closed ? '收盘' : '最新'}价 ${(info.price ?? 0).toFixed(2)}，${rtChg >= 0 ? '上涨' : '下跌'} ${Math.abs(rtChg).toFixed(2)}%${timeTag}`);
   if (events.length > 0) {
     lines.push('—— 盘中异动 ——');
     for (const evt of events) {
@@ -202,7 +203,7 @@ function describeIntradayMovement(intraday: IntradayData, info: StockInfo): stri
   const high = Math.max(...prices);
   const low = Math.min(...prices);
   const pattern = analyzeIntradayPattern(prices, preClose);
-  const changePct = info.changePercent;
+  const changePct = info.changePercent ?? ((close - preClose) / preClose) * 100;
 
   const gapPct = ((open - preClose) / preClose) * 100;
   const intraRange = ((high - low) / preClose) * 100;
@@ -292,8 +293,12 @@ function analyzeMACD(kline: KlineBar[]): string[] {
   const { dif, dea, macd } = last.macd;
   const prev = kline.length > 1 ? kline[kline.length - 2].macd : null;
 
+  if (dif == null || dea == null || macd == null) {
+    return ['MACD数据不足（该股上市时间较短，样本不足以计算指标）'];
+  }
+
   // 柱状图变化趋势
-  const barIncreasing = prev ? macd > prev.macd : true;
+  const barIncreasing = prev && prev.macd != null ? macd > prev.macd : true;
 
   if (dif > dea && macd > 0) {
     lines.push(`MACD处于多头区域，DIF ${dif.toFixed(2)} > DEA ${dea.toFixed(2)}，红柱${barIncreasing ? '持续放大' : '开始缩短'}，多头动能${barIncreasing ? '增强' : '衰减'}`);
@@ -316,6 +321,10 @@ function analyzeRSI(kline: KlineBar[]): string[] {
   const lines: string[] = [];
   const last = kline[kline.length - 1];
   if (!last.rsi) return ['RSI数据不足'];
+
+  if (last.rsi.rsi6 == null && last.rsi.rsi12 == null && last.rsi.rsi24 == null) {
+    return ['RSI数据不足（该股上市时间较短，样本不足以计算指标）'];
+  }
 
   const rsi6 = last.rsi.rsi6;
   const rsi12 = last.rsi.rsi12;
@@ -358,6 +367,11 @@ function analyzeBollinger(kline: KlineBar[]): string[] {
 
   const { mid, upper, lower } = last.boll;
   const price = last.close;
+
+  if (mid == null || upper == null || lower == null || mid === 0) {
+    return ['布林带数据不足（该股上市时间较短，样本不足以计算指标）'];
+  }
+
   const bandwidth = ((upper - lower) / mid) * 100;
 
   // 带宽分析
@@ -393,6 +407,10 @@ function analyzeKDJ(kline: KlineBar[]): string[] {
 
   const { k, d, j } = last.kdj;
   const prev = kline.length > 1 ? kline[kline.length - 2].kdj : null;
+
+  if (k == null || d == null || j == null) {
+    return ['KDJ数据不足（该股上市时间较短，样本不足以计算指标）'];
+  }
 
   // KDJ交叉
   if (prev) {
@@ -489,11 +507,12 @@ function generateOperationAdvice(signals: SignalResult, prediction: PredictionRe
   }
 
   // 关键价位
-  lines.push(`短线支撑位：${signals.support.toFixed(2)}，阻力位：${signals.resistance.toFixed(2)}`);
+  const fmtPrice = (v: any) => (typeof v === 'number' && isFinite(v) ? v.toFixed(2) : '—');
+  lines.push(`短线支撑位：${fmtPrice(signals.support)}，阻力位：${fmtPrice(signals.resistance)}`);
 
   // 止损止盈
-  lines.push(`建议止损价：${signals.stopLoss.price.toFixed(2)}（${signals.stopLoss.reason}）`);
-  lines.push(`建议止盈价：${signals.takeProfit.price.toFixed(2)}（${signals.takeProfit.reason}）`);
+  lines.push(`建议止损价：${fmtPrice(signals.stopLoss?.price)}（${signals.stopLoss?.reason || '数据不足'}）`);
+  lines.push(`建议止盈价：${fmtPrice(signals.takeProfit?.price)}（${signals.takeProfit?.reason || '数据不足'}）`);
 
   // 趋势预测
   const trendMap: Record<string, string> = {
@@ -522,11 +541,13 @@ function generateOutlook(prediction: PredictionResult, signals: SignalResult): s
     // 置信区间描述
     const upperRange = lastForecast.upper95;
     const lowerRange = lastForecast.lower95;
-    const rangeWidth = ((upperRange - lowerRange) / lastForecast.value) * 100;
-    if (rangeWidth > 20) {
-      lines.push(`95%置信区间较宽（${lowerRange.toFixed(2)} ~ ${upperRange.toFixed(2)}），表明市场不确定性较大，预测仅供参考`);
-    } else {
-      lines.push(`95%置信区间：[${lowerRange.toFixed(2)} ~ ${upperRange.toFixed(2)}]`);
+    if (upperRange != null && lowerRange != null && lastForecast.value) {
+      const rangeWidth = ((upperRange - lowerRange) / lastForecast.value) * 100;
+      if (rangeWidth > 20) {
+        lines.push(`95%置信区间较宽（${lowerRange.toFixed(2)} ~ ${upperRange.toFixed(2)}），表明市场不确定性较大，预测仅供参考`);
+      } else {
+        lines.push(`95%置信区间：[${lowerRange.toFixed(2)} ~ ${upperRange.toFixed(2)}]`);
+      }
     }
   }
 
@@ -566,12 +587,13 @@ export function generateMarketRecap(
     summaryLines.push(describeIntradayMovement(intraday, info));
     summaryLines.push(analyzeVolume(intraday, kline));
   } else {
-    const last = kline[kline.length - 1];
-    summaryLines.push(`今日最新价 ${info.price.toFixed(2)}，涨跌幅 ${info.changePercent >= 0 ? '+' : ''}${info.changePercent.toFixed(2)}%`);
-    summaryLines.push(`开盘 ${info.open.toFixed(2)} / 最高 ${info.high.toFixed(2)} / 最低 ${info.low.toFixed(2)} / 收盘 ${info.price.toFixed(2)}`);
+    const infoPrice = info.price ?? kline[kline.length - 1]?.close ?? 0;
+    const infoChg = info.changePercent ?? 0;
+    summaryLines.push(`今日最新价 ${infoPrice.toFixed(2)}，涨跌幅 ${infoChg >= 0 ? '+' : ''}${infoChg.toFixed(2)}%`);
+    summaryLines.push(`开盘 ${(info.open ?? 0).toFixed(2)} / 最高 ${(info.high ?? 0).toFixed(2)} / 最低 ${(info.low ?? 0).toFixed(2)} / 收盘 ${infoPrice.toFixed(2)}`);
   }
 
-  const isPositiveDay = info.changePercent >= 0;
+  const isPositiveDay = (info.changePercent ?? 0) >= 0;
   const isOpen = isMarketOpen();
   const summary: RecapSection = {
     title: isOpen ? '盘中实时动态' : '今日收盘点评',

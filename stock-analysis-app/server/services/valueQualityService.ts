@@ -200,7 +200,8 @@ async saveResult(code: string, result: QualityResult): Promise<void> {
       "数据年份": last.year + "年报",
     };
     if (info.price) financialSnapshot["当前价"] = info.price;
-    if (info.marketCap) financialSnapshot["市值"] = (info.marketCap * 1e8).toLocaleString() + "亿";
+    // info.marketCap 单位已是「亿」，直接展示，勿再乘 1e8
+    if (info.marketCap) financialSnapshot["市值"] = Number(info.marketCap).toLocaleString() + "亿";
     if ((info as any).pe) financialSnapshot["PE"] = (info as any).pe;
     if ((info as any).pb) financialSnapshot["PB"] = (info as any).pb;
 
