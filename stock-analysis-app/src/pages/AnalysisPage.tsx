@@ -526,15 +526,23 @@ export default function AnalysisPage({ code: propCode }: AnalysisPageProps) {
               const isMainIn = mainPct > 0;
               // 最近5天主力净流入天数
               const last5 = fundFlow.slice(-5);
+              const sampleDays = last5.length;
               const inDays = last5.filter((d: any) => (d.mainNetInflowPercent || 0) > 0).length;
               // 最近5天累计主力净占比
               const sum5 = last5.reduce((s: number, d: any) => s + (d.mainNetInflowPercent || 0), 0);
+              // 方向判定：净流入天数与累计净占比必须同向，避免「累计净流入却标空头主导」这类自相矛盾
+              const halfDays = Math.ceil(sampleDays / 2);
+              const isBullFlow = sum5 > 0 && inDays >= halfDays;
+              const isBearFlow = sum5 < 0 && inDays < halfDays;
+              const flowTrendLabel = sampleDays < 3 ? '⚪ 样本不足' : isBullFlow ? '✅ 多头主导' : isBearFlow ? '❌ 空头主导' : '⚪ 多空拉锯';
+              const flowTrendColor = sampleDays < 3 ? '#999' : isBullFlow ? '#cf1322' : isBearFlow ? '#3cb371' : '#faad14';
               // 文字总结
               let summary = '';
-              if (isMainIn && inDays >= 3) summary = '主力连续净流入，资金积极做多';
-              else if (isMainIn) summary = '主力今日净流入，关注持续性';
-              else if (inDays <= 1 && sum5 < -2) summary = '主力持续流出，资金态度偏空';
-              else if (inDays <= 1) summary = '主力近期以流出为主，谨慎观望';
+              if (sampleDays < 3) summary = '资金流数据不足，暂不做方向判断';
+              else if (isBullFlow && isMainIn) summary = '主力连续净流入，资金积极做多';
+              else if (isBullFlow) summary = '近几日主力以净流入为主，今日转为流出，注意节奏';
+              else if (isMainIn) summary = '主力今日净流入，但近期仍以流出为主，关注持续性';
+              else if (isBearFlow) summary = '主力近期持续流出，资金态度偏空';
               else summary = '主力进出交替，方向不明确';
 
               return (
@@ -546,16 +554,16 @@ export default function AnalysisPage({ code: propCode }: AnalysisPageProps) {
                     <div style={{ fontSize: 11, color: '#999' }}>今日主力净占比</div>
                   </div>
                   <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: inDays >= 3 ? '#cf1322' : inDays <= 1 ? '#3cb371' : '#faad14' }}>
-                      {inDays}/5天
+                    <div style={{ fontSize: 28, fontWeight: 700, color: flowTrendColor }}>
+                      {inDays}/{sampleDays}天
                     </div>
-                    <div style={{ fontSize: 11, color: '#999' }}>近5日净流入天数</div>
+                    <div style={{ fontSize: 11, color: '#999' }}>近期净流入天数</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 200 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: '#333', marginBottom: 4 }}>{summary}</div>
                     <div style={{ fontSize: 11, color: '#999', lineHeight: 1.6 }}>
-                      近5日累计净占比 <b style={{ color: sum5 >= 0 ? '#cf1322' : '#3cb371' }}>{sum5 > 0 ? '+' : ''}{sum5.toFixed(2)}%</b>
-                      · {inDays >= 3 ? '✅ 多头主导' : inDays <= 1 ? '❌ 空头主导' : '⚪ 多空拉锯'}
+                      近{sampleDays}日累计净占比 <b style={{ color: sum5 >= 0 ? '#cf1322' : '#3cb371' }}>{sum5 > 0 ? '+' : ''}{sum5.toFixed(2)}%</b>
+                      · {flowTrendLabel}
                     </div>
                   </div>
                 </>

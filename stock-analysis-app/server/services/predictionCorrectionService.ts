@@ -1,3 +1,4 @@
+import { StockSDK } from 'stock-sdk';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config';
@@ -121,7 +122,6 @@ export class PredictionCorrectionService {
    */
   async getMarketCondition(): Promise<'bull' | 'bear' | 'neutral'> {
     try {
-      const { StockSDK } = require('stock-sdk');
       const sdk = new StockSDK({ retry: { maxRetries: 0 } });
       const quotes = await sdk.getSimpleQuotes(['sh000001']);
       if (quotes && quotes.length > 0) {

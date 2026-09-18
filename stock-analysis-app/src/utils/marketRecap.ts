@@ -128,17 +128,26 @@ function detectIntradayEvents(intraday: IntradayData, preClose: number): Intrada
   const times = intraday.data.map(p => p.time);
   const volumes = intraday.data.map(p => p.volume);
   const windowSize = 5;
+
+  // 异动阈值随当日振幅自适应：新股上市首日、涨跌停异动股的日内振幅动辄几十上百个百分点，
+  // 固定 1.5%/2% 的阈值会把普通过滤成全「异动」，故按振幅等比放大
+  const base = preClose && preClose > 0 ? preClose : prices[0];
+  const dayAmplitudePct = base > 0 ? ((Math.max(...prices) - Math.min(...prices)) / base) * 100 : 0;
+  const scale = Math.min(25, Math.max(1, dayAmplitudePct / 8));
+  const riseThreshold = 1.5 * scale;
+  const dropThreshold = 1.5 * scale;
+  const reversalThreshold = 2 * scale;
+  const lastEventIndex: Record<string, number> = {};
+
   for (let i = windowSize; i < prices.length; i++) {
     const changePct = ((prices[i] - prices[i - windowSize]) / prices[i - windowSize]) * 100;
-    if (changePct > 1.5) {
-      const last = events[events.length - 1];
-      if (last?.type === 'rapid_rise' && Math.abs(i - prices.indexOf(prices[times.indexOf(last.time)])) < 6) continue;
-      events.push({ time: times[i], type: 'rapid_rise', desc: `${times[i]} 快速拉升 ${changePct.toFixed(1)}%（5分钟涨幅）`, suggestion: changePct > 2 ? '短线追涨需谨慎，观察能否突破前高' : '小幅拉升，关注量能配合' });
+    if (changePct > riseThreshold && (lastEventIndex.rapid_rise == null || i - lastEventIndex.rapid_rise >= 6)) {
+      lastEventIndex.rapid_rise = i;
+      events.push({ time: times[i], type: 'rapid_rise', desc: `${times[i]} 快速拉升 ${changePct.toFixed(1)}%（5分钟涨幅）`, suggestion: changePct > 2 * scale ? '短线追涨需谨慎，观察能否突破前高' : '小幅拉升，关注量能配合' });
     }
-    if (changePct < -1.5) {
-      const last = events[events.length - 1];
-      if (last?.type === 'sharp_drop' && Math.abs(i - prices.indexOf(prices[times.indexOf(last.time)])) < 6) continue;
-      events.push({ time: times[i], type: 'sharp_drop', desc: `${times[i]} 快速跳水 ${Math.abs(changePct).toFixed(1)}%（5分钟跌幅）`, suggestion: Math.abs(changePct) > 2 ? '⚠️ 快速跳水，建议观望，跌破支撑考虑止损' : '短线回调，观察能否企稳' });
+    if (changePct < -dropThreshold && (lastEventIndex.sharp_drop == null || i - lastEventIndex.sharp_drop >= 6)) {
+      lastEventIndex.sharp_drop = i;
+      events.push({ time: times[i], type: 'sharp_drop', desc: `${times[i]} 快速跳水 ${Math.abs(changePct).toFixed(1)}%（5分钟跌幅）`, suggestion: Math.abs(changePct) > 2 * scale ? '⚠️ 快速跳水，建议观望，跌破支撑考虑止损' : '短线回调，观察能否企稳' });
     }
   }
   const avgMinVol = volumes.reduce((s, v) => s + v, 0) / volumes.length;
@@ -152,7 +161,7 @@ function detectIntradayEvents(intraday: IntradayData, preClose: number): Intrada
     const seg = prices.slice(i - 10, i + 1);
     const drop = ((Math.min(...seg.slice(0, 6)) - seg[0]) / seg[0]) * 100;
     const rise = ((seg[seg.length - 1] - Math.min(...seg.slice(5))) / Math.min(...seg.slice(5))) * 100;
-    if (drop < -2 && rise > 2) {
+    if (drop < -reversalThreshold && rise > reversalThreshold) {
       events.push({ time: times[i], type: 'v_reversal', desc: `${times[i]} V型反转（先跌${Math.abs(drop).toFixed(1)}%后涨${rise.toFixed(1)}%）`, suggestion: 'V型反转是短线买入信号，关注突破确认' });
     }
   }

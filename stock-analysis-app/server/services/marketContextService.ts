@@ -1,3 +1,4 @@
+import { StockSDK } from 'stock-sdk';
 import { CacheService } from './cacheService';
 
 export interface MarketContext {
@@ -42,7 +43,6 @@ export class MarketContextService {
     const cached = await this.cache.get<{ name: string; price: number; changePercent: number }[]>('market_indices');
     if (cached) return cached;
 
-    const { StockSDK } = require('stock-sdk');
     const sdk = new StockSDK({ retry: { maxRetries: 0 } });
 
     try {
@@ -71,9 +71,8 @@ export class MarketContextService {
     if (cached) return cached;
 
     try {
-      const { StockSDK } = require('stock-sdk');
       const sdk = new StockSDK({ retry: { maxRetries: 0 } });
-      const spots = await sdk.getIndustrySpot();
+      const spots = await sdk.getIndustryList();
       if (!spots || spots.length === 0) return [];
 
       const sorted = spots
@@ -96,22 +95,28 @@ export class MarketContextService {
     if (cached) return cached;
 
     try {
-      const { StockSDK } = require('stock-sdk');
       const sdk = new StockSDK({ retry: { maxRetries: 0 } });
 
       let mainForce = 0, retail = 0, northbound = 0;
 
       try {
-        const flow = await sdk.getMarketFundFlow();
-        if (flow) {
-          mainForce = flow.mainForce || 0;
-          retail = flow.retail || 0;
+        // getMarketFundFlow 返回按日期排列的数组，取最新一天
+        const flows: any = await sdk.getMarketFundFlow();
+        const latest = Array.isArray(flows) ? flows[flows.length - 1] : null;
+        if (latest) {
+          mainForce = latest.mainNetInflow || 0;
+          retail = latest.smallNetInflow || 0;
         }
       } catch {}
 
       try {
-        const nb = await sdk.getNorthboundFlowSummary();
-        if (nb) northbound = nb.netInflow || 0;
+        const summaries: any = await sdk.getNorthboundFlowSummary();
+        const list: any[] = Array.isArray(summaries) ? summaries : [];
+        const northList = list.filter((x: any) => String(x.direction || '').includes('北向'));
+        const latestDate = northList.reduce((d: string, x: any) => (x.date > d ? x.date : d), '');
+        northbound = northList
+          .filter((x: any) => x.date === latestDate)
+          .reduce((s: number, x: any) => s + (x.netInflow || 0), 0);
       } catch {}
 
       const result = { mainForce, retail, northbound };
@@ -126,7 +131,6 @@ export class MarketContextService {
    * 获取个股综合上下文
    */
   async getStockContext(code: string, stockName: string): Promise<StockContext> {
-    const { StockSDK } = require('stock-sdk');
     const sdk = new StockSDK({ retry: { maxRetries: 0 } });
     const normalized = code.startsWith('sh') || code.startsWith('sz') ? code : `sh${code}`;
 
@@ -137,7 +141,7 @@ export class MarketContextService {
 
     // 行业板块
     try {
-      const spots = await sdk.getIndustrySpot();
+      const spots = await sdk.getIndustryList();
       if (spots) {
         for (const s of spots) {
           if (s.name && stockName.includes(s.name.slice(0, 2))) {
@@ -151,7 +155,7 @@ export class MarketContextService {
 
     // 概念板块
     try {
-      const cspots = await sdk.getConceptSpot();
+      const cspots = await sdk.getConceptList();
       if (cspots) {
         for (const c of cspots.slice(0, 20)) {
           if (c.name && (stockName.includes(c.name.slice(0, 2)) || code.includes(c.code || ''))) {

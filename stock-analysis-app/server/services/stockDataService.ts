@@ -977,6 +977,78 @@ export class StockDataService {
     return result;
   }
 
+  /**
+   * 行业/概念板块当日行情（用于异动归因、板块表现）
+   *
+   * 东方财富该接口有多个镜像域名，实测各域名可用性会随机波动，
+   * 单个域名不通时就整块板块数据缺失，故逐个域名降级重试。
+   */
+  /** 板块行情内存缓存（不落盘，60 秒有效） */
+  private boardSpotCache: Record<string, { at: number; data: { name: string; code: string; changePercent: number }[] }> = {};
+
+  async getBoardSpots(type: 'industry' | 'concept' = 'industry'): Promise<{ name: string; code: string; changePercent: number }[]> {
+    // 盘中板块涨跌幅时效性强，单独用 60 秒内存缓存（统一缓存层的内存 TTL 是 5 分钟，太旧）
+    const cached = this.boardSpotCache[type];
+    if (cached && Date.now() - cached.at < 60000) return cached.data;
+
+    const fs = type === 'industry' ? 'm:90 t:2 f:!50' : 'm:90 t:3 f:!50';
+    const hosts = [
+      'push2.eastmoney.com',
+      '17.push2.eastmoney.com',
+      '79.push2.eastmoney.com',
+      '29.push2.eastmoney.com',
+      '91.push2.eastmoney.com',
+    ];
+
+    let boards: { name: string; code: string; changePercent: number }[] = [];
+    let lastError = '';
+    for (const host of hosts) {
+      try {
+        const rows = await this.fetchBoardPages(host, fs);
+        if (rows.length > 0) {
+          boards = rows;
+          break;
+        }
+        lastError = `${host}: 返回空数据`;
+      } catch (e: any) {
+        lastError = `${host}: ${e.message}`;
+      }
+    }
+
+    // 失败结果也缓存，避免数据源不可用时每次请求都重试全部镜像
+    this.boardSpotCache[type] = { at: Date.now(), data: boards };
+    if (boards.length === 0) {
+      console.warn(`[BoardSpots] ${type} 板块数据源暂不可用（${lastError || '未知原因'}）`);
+    }
+    return boards;
+  }
+
+  /** 拉取某个域名下的全量板块列表（分页） */
+  private async fetchBoardPages(host: string, fs: string): Promise<{ name: string; code: string; changePercent: number }[]> {
+    const result: { name: string; code: string; changePercent: number }[] = [];
+    for (let pn = 1; pn <= 10; pn++) {
+      const url = `https://${host}/api/qt/clist/get?pn=${pn}&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=${encodeURIComponent(fs)}&fields=f12,f14,f3`;
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://quote.eastmoney.com/' },
+        signal: AbortSignal.timeout(8000),
+      });
+      const json = await resp.json() as any;
+      const diff = json?.data?.diff;
+      const page: any[] = Array.isArray(diff) ? diff : (diff && typeof diff === 'object' ? Object.values(diff) : []);
+      if (page.length === 0) break;
+
+      for (const row of page) {
+        const name = String(row?.f14 ?? '').trim();
+        const pct = Number(row?.f3);
+        if (name && isFinite(pct)) {
+          result.push({ name, code: String(row?.f12 ?? '').trim(), changePercent: pct });
+        }
+      }
+      if (page.length < 100) break;
+    }
+    return result;
+  }
+
   private getMarketPrefix(code: string): string {
     // 港股代码通常为5位数字
     if (code.length <= 5 && /^\d{1,5}$/.test(code)) return 'hk';

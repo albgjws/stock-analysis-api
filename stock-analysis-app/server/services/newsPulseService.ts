@@ -85,42 +85,50 @@ export class NewsPulseService {
     }
 
     // \u884c\u4e1a\u677f\u5757 + \u6982\u5ff5\u677f\u5757
-    let sectorContext = '\u6682\u65e0\u884c\u4e1a\u677f\u5757\u6570\u636e\u3002';
+    let sectorContext = '\u6682\u65e0\u884c\u4e1a\u677f\u5757\u6570\u636e\uff08\u677f\u5757\u6570\u636e\u6e90\u6682\u4e0d\u53ef\u7528\uff09\u3002';
     const concepts: { name: string; changePercent: number }[] = [];
     try {
-      const { StockSDK } = require('stock-sdk');
-      const sdk = new StockSDK({ retry: { maxRetries: 0 } });
+      // 用个股真实所属的行业/概念名去匹配板块，而不是拿股票名去猜板块名
+      let profile: any = null;
+      try {
+        profile = await this.stockDataService.getStockProfile(code);
+      } catch (e: any) {
+        console.warn('[NewsPulse] 获取个股资料失败:', e.message);
+      }
 
-      // \u884c\u4e1a\u677f\u5757
-      const spots = await sdk.getIndustrySpot();
-      if (spots && spots.length > 0 && info?.name) {
-        const sn = info.name;
-        // \u9010\u4e2a\u5339\u914d\u80a1\u7968\u540d\u79f0\u4e0e\u884c\u4e1a\u540d\u79f0
-        for (const s of spots) {
-          if (s.name && sn.includes(s.name.slice(0, 2))) {
-            sectorContext = '\u6240\u5c5e\u884c\u4e1a\u300c' + s.name + '\u300d\u5f53\u65e5\u6da8\u8dcc\u5e45 ' + (s.changePercent >= 0 ? '+' : '') + (s.changePercent || 0).toFixed(1) + '%\uff0c' + ((s.changePercent || 0) > 1 ? '\u8868\u73b0\u5f3a\u52bf' : (s.changePercent || 0) < -1 ? '\u8868\u73b0\u8f83\u5f31' : '\u8868\u73b0\u5e73\u7a33') + '\u3002';
-            compositeScore += (s.changePercent || 0) > 0 ? 10 : -10;
-            break;
+      // 行业板块（板块接口返回全量行业板块且带涨跌幅，按名称匹配）
+      const industryName = String(profile?.industry || '').trim();
+      if (industryName) {
+        const boards = await this.stockDataService.getBoardSpots('industry');
+        const board = boards.find((b: any) => b.name === industryName) ||
+          boards.find((b: any) => b.name && (industryName.includes(b.name) || b.name.includes(industryName)));
+        if (board) {
+          const pct = board.changePercent || 0;
+          sectorContext = '所属行业「' + board.name + '」当日涨跌幅 ' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%，' + (pct > 1 ? '表现强势' : pct < -1 ? '表现较弱' : '表现平稳') + '。';
+          compositeScore += pct > 0 ? 10 : -10;
+        }
+      }
+
+      // 概念板块
+      const conceptNames: string[] = (profile?.concepts || [])
+        .map((c: any) => String(c?.name || '').trim())
+        .filter(Boolean);
+      if (conceptNames.length > 0) {
+        const conceptBoards = await this.stockDataService.getBoardSpots('concept');
+        const boardByName = new Map<string, any>(conceptBoards.map((b: any) => [b.name, b]));
+        for (const n of conceptNames) {
+          if (concepts.length >= 5) break;
+          const board = boardByName.get(n);
+          if (board) {
+            const pct = board.changePercent || 0;
+            concepts.push({ name: board.name, changePercent: pct });
+            compositeScore += pct > 0 ? 5 : -5;
           }
         }
       }
 
-      // \u6982\u5ff5\u677f\u5757
-      const cspots = await sdk.getConceptSpot();
-      if (cspots && cspots.length > 0 && info?.name) {
-        const sn = info.name;
-        for (const c of cspots.slice(0, 30)) {
-          if (c.name) {
-            const shortName = c.name.length >= 2 ? c.name.slice(0, 2) : c.name;
-            if (sn.includes(shortName)) {
-              concepts.push({ name: c.name, changePercent: c.changePercent || 0 });
-              compositeScore += (c.changePercent || 0) > 0 ? 5 : -5;
-            }
-          }
-        }
-      }
     } catch (e: any) {
-      console.warn('[NewsPulse] \u83b7\u53d6\u677f\u5757\u6570\u636e\u5931\u8d25:', e.message);
+      console.warn('[NewsPulse] 获取板块数据失败:', e.message);
     }
 
     // \u7efc\u5408\u5224\u65ad
