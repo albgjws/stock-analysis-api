@@ -29,7 +29,7 @@ export class PurchaseAnalysisService {
     if (pnlPercent >= 0) score += 10; else score -= 10;
 
     // 2. 相对于布林带的位置
-    if (last.boll) {
+    if (last.boll && last.boll.mid != null && last.boll.upper != null && last.boll.lower != null) {
       const { mid, upper, lower } = last.boll;
       if (purchasePrice <= lower * 1.02) {
         details.push({
@@ -63,7 +63,7 @@ export class PurchaseAnalysisService {
     }
 
     // 3. 相对于均线的位置
-    if (last.ma) {
+    if (last.ma && (last.ma.ma5 != null || last.ma.ma10 != null || last.ma.ma20 != null || last.ma.ma60 != null)) {
       const { ma5, ma10, ma20, ma60 } = last.ma;
       const mas = [ma5, ma10, ma20, ma60].filter(m => m != null) as number[];
       const sortedMas = [...mas].sort((a, b) => a - b);
@@ -144,7 +144,7 @@ export class PurchaseAnalysisService {
     }
 
     // 5. MACD 趋势
-    if (last.macd) {
+    if (last.macd && last.macd.dif != null && last.macd.dea != null && last.macd.macd != null) {
       const { dif, dea, macd } = last.macd;
       if (dif > dea && macd > 0) {
         details.push({
@@ -178,9 +178,16 @@ export class PurchaseAnalysisService {
     }
 
     // 6. 成交量分析
-    const avgVolume = kline.slice(-21, -1).reduce((s, b) => s + b.volume, 0) / 20;
-    const volRatio = last.volume / avgVolume;
-    if (last.changePercent != null && last.changePercent > 0 && volRatio > 1.3) {
+    const volSample = Math.max(1, Math.min(20, kline.length - 1));
+    const avgVolume = kline.slice(-(volSample + 1), -1).reduce((s, b) => s + b.volume, 0) / volSample;
+    const volRatio = avgVolume > 0 ? last.volume / avgVolume : 0;
+    if (avgVolume <= 0) {
+      details.push({
+        item: '成交量配合',
+        status: 'neutral',
+        comment: '成交量数据不足，暂不评估 ⚪',
+      });
+    } else if (last.changePercent != null && last.changePercent > 0 && volRatio > 1.3) {
       details.push({
         item: '成交量配合',
         status: 'good',
@@ -203,7 +210,7 @@ export class PurchaseAnalysisService {
     }
 
     // 7. KDJ 信号
-    if (last.kdj) {
+    if (last.kdj && last.kdj.k != null && last.kdj.d != null && last.kdj.j != null) {
       const { k, d, j } = last.kdj;
       if (k > d && k < 40) {
         details.push({

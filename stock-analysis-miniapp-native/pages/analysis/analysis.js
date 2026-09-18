@@ -1,6 +1,8 @@
 ﻿var API = require('../../utils/api');
 function $(v){return(v||0).toFixed(2)}
 function $Y(v){return'¥'+(v||0).toFixed(2)}
+function N(v){return typeof v==='number'&&isFinite(v)}
+function NK(o,k){return!!o&&N(o[k])}
 function V(v){if(!v)return'0';if(v>=1e8)return(v/1e8).toFixed(2)+'亿';if(v>=1e4)return(v/1e4).toFixed(0)+'万';return''+v}
 
 Page({
@@ -16,7 +18,7 @@ Page({
     supText:'',resText:'',
 
     threeLocks:[],hasThreeLocks:0,tdSeq:[],hasTd:0,swingPts:[],hasSwing:0,dualCross:[],hasDualCross:0,limitPred:null,hasLimitPred:0,
-    ffData:[],ffLatest:'',ffCount:0,ffSummary:'',ffInDays:0,ffSum5:'',ffSum5Val:0,ffDominant:'',ffIn:0,chipNow:'—',chipTrend:'—',chipClr:'#999',chipClrVal:'#722ed1',
+    ffData:[],ffLatest:'',ffCount:0,ffSummary:'',ffInDays:0,ffSampleDays:0,ffTrendClr:'#999',ffSum5:'',ffSum5Val:0,ffDominant:'',ffIn:0,chipNow:'—',chipTrend:'—',chipClr:'#999',chipClrVal:'#722ed1',
 
     macdBars:[],macdSummary:'',macdDif:'',macdDea:'',macdBarVal:'',macdBarCls:'neutral',
     rsiBars:[],rsiSummary:'',rsiNow:'',
@@ -24,7 +26,7 @@ Page({
 
     sigItems:[],sigDetails:[],sigBuyCount:0,sigSellCount:0,sigNeutralCount:0,
 
-    tlBars:[],idOpenText:'',idAvgText:'',
+    tlBars:[],idOpenText:'',idAvgText:'',idMaxPctText:'',idMinPctText:'',idMaxPctCls:'up',idMinPctCls:'up',
 
     hk:0,klCount:0,klLastDate:'',klBars:[],
     predTrend:'',predCls:'neutral',predConf:'',predRange:'',
@@ -38,7 +40,7 @@ Page({
 
     buyVal:'',diag:null,diagScoreCls:'',diagProbCls:'',diagProbTxt:'',diagSlText:'',diagTpText:'',
     txExpanded:false,txData:[],
-    profile:null,profileIndustry:'',profileRegion:'',profileConcepts:[],
+    profile:null,profileIndustry:'',profileRegion:'',profileConcepts:[],klWarn:'',
   },
 
   onLoad(o){
@@ -60,6 +62,7 @@ Page({
   },
 
   process(a,id,bt,ff,profile){
+    var me=this;
     var info=a.info||{},sig=a.signals||{},kl=a.kline||[],pred=a.prediction||{};
     if(!ff)ff=a.fundFlow||[];
     // 个股资料
@@ -193,15 +196,21 @@ Page({
     var ffL=ff.length>0?$(ff[ff.length-1].mainNetInflowPercent):'';
     // 资金流向文字总结
     var ffLast=ff[ff.length-1]||{},ffPct=ffLast.mainNetInflowPercent||0,ffIn=ffPct>0;
-    var ffLast5=ff.slice(-5),ffInDays=0,ffSum5=0;
+    var ffLast5=ff.slice(-5),ffInDays=0,ffSum5=0,ffSampleDays=ffLast5.length;
     ffLast5.forEach(function(f){if((f.mainNetInflowPercent||0)>0)ffInDays++;ffSum5+=(f.mainNetInflowPercent||0);});
+    // 方向判定：净流入天数与累计净占比必须同向，避免自相矛盾
+    var ffHalfDays=Math.ceil(ffSampleDays/2);
+    var ffBull=ffSum5>0&&ffInDays>=ffHalfDays;
+    var ffBear=ffSum5<0&&ffInDays<ffHalfDays;
     var ffSummary='';
-    if(ffIn&&ffInDays>=3)ffSummary='主力连续净流入，资金积极做多';
-    else if(ffIn)ffSummary='主力今日净流入，关注持续性';
-    else if(ffInDays<=1&&ffSum5<-2)ffSummary='主力持续流出，资金态度偏空';
-    else if(ffInDays<=1)ffSummary='主力近期以流出为主，谨慎观望';
+    if(ffSampleDays<3)ffSummary='资金流数据不足，暂不做方向判断';
+    else if(ffBull&&ffIn)ffSummary='主力连续净流入，资金积极做多';
+    else if(ffBull)ffSummary='近几日主力以净流入为主，今日转为流出，注意节奏';
+    else if(ffIn)ffSummary='主力今日净流入，但近期仍以流出为主，关注持续性';
+    else if(ffBear)ffSummary='主力近期持续流出，资金态度偏空';
     else ffSummary='主力进出交替，方向不明确';
-    var ffDominant=ffInDays>=3?'✅ 多头主导':ffInDays<=1?'❌ 空头主导':'⚪ 多空拉锯';
+    var ffDominant=ffSampleDays<3?'⚪ 样本不足':ffBull?'✅ 多头主导':ffBear?'❌ 空头主导':'⚪ 多空拉锯';
+    var ffTrendClr=ffSampleDays<3?'#999':ffBull?'#cf1322':ffBear?'#3cb371':'#faad14';
     // 筹码集中度计算
     var chipVals=[],chipSum=0;ff.forEach(function(f){
       var big=(f.superLargeNetInflowPercent||0)+(f.largeNetInflowPercent||0);
@@ -221,7 +230,7 @@ Page({
     var chipClrVal=chipIsPositive?'#cf1322':'#3cb371';
 
     // MACD
-    var md=kl.map(function(b){return b.macd}).filter(Boolean).slice(-35);
+    var md=kl.map(function(b){return b.macd}).filter(function(d){return NK(d,'dif')&&NK(d,'dea')}).slice(-35);
     var mx=Math.max.apply(null,md.map(function(d){return Math.abs(d.macd||0)}))||1;
     var mb=md.map(function(d){return{h:Math.abs(d.macd||0)/mx*60,c:(d.macd||0)>=0?'#cf1322':'#3cb371'}});
     var lm=md[md.length-1]||{};
@@ -231,7 +240,7 @@ Page({
     var rn=rv[rv.length-1]||50,rb=rv.map(function(v){return{h:v/100*68,c:v>70?'#cf1322':v<30?'#3cb371':'#722ed1'}});
 
     // KDJ
-    var kv=kl.map(function(b){return b.kdj}).filter(Boolean).slice(-35);
+    var kv=kl.map(function(b){return b.kdj}).filter(function(d){return NK(d,'k')&&NK(d,'d')}).slice(-35);
     var lk=kv[kv.length-1]||{},kb=kv.map(function(d){return{k:(d.k||0)/100*70+10,d:(d.d||0)/100*70+10}});
 
     // K线
@@ -245,13 +254,15 @@ Page({
     var predRange=lpf?$Y(lpf.lower95)+' ~ '+$Y(lpf.upper95):'—';
 
     // 分时
-    var idD=id&&id.data||[],idP=idD.map(function(p){return p.price}),idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id&&id.preClose||0;var idMaxPct=(idMx-pc)/pc*100,idMinPct=(idMn-pc)/pc*100;
+    var idD=id&&id.data||[],idP=idD.map(function(p){return p.price}),idSafe=idP.length>0?idP:[0];
+    var idMn=Math.min.apply(null,idSafe),idMx=Math.max.apply(null,idSafe),idR=idMx-idMn||.01,pc=id&&id.preClose||idMx||0;
+    var idMaxPct=pc>0?(idMx-pc)/pc*100:0,idMinPct=pc>0?(idMn-pc)/pc*100:0;
     var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
     // 逐笔成交初始加载
-    API.getTransactions(c,50).then(function(td){if(td&&td.length){me.setData({txData:td.map(function(x){x.tTxt=x.time.slice(0,5);x.tTxt=x.time.slice(0,5);x.pTxt=x.price.toFixed(2);x.vTxt=x.volume>=1e8?(x.volume/1e8).toFixed(2)+'亿':x.volume>=1e4?(x.volume/1e4).toFixed(1)+'万':''+x.volume.toLocaleString();return x})})}}).catch(function(){});
+    API.getTransactions(me.data.code,50).then(function(td){if(td&&td.length){me.setData({txData:td.map(function(x){x.tTxt=x.time.slice(0,5);x.tTxt=x.time.slice(0,5);x.pTxt=x.price.toFixed(2);x.vTxt=x.volume>=1e8?(x.volume/1e8).toFixed(2)+'亿':x.volume>=1e4?(x.volume/1e4).toFixed(1)+'万':''+x.volume.toLocaleString();return x})})}}).catch(function(){});
 
     // 复盘
-    var lb=hk?kl[kl.length-1]:{},avg=hk?kl.slice(-20).reduce(function(s,b){return s+b.volume},0)/20:0,tv=lb.volume||0;
+    var lb=hk?kl[kl.length-1]:{},avg=hk?kl.slice(-20).reduce(function(s,b){return s+b.volume},0)/Math.max(1,Math.min(20,kl.length)):0,tv=lb.volume||0;
 
     // 操作建议
     var isBuy=sig.overall==='STRONG_BUY'||sig.overall==='BUY';
@@ -260,7 +271,47 @@ Page({
 
     // 后市预测
     var tr=pred.trend||'sideways';
+    var klWarn=hk&&kl.length<26?'该股上市（或复牌）时间较短，目前只有 '+kl.length+' 个交易日数据，均线、MACD、布林带、KDJ 等技术指标暂不可用，下方评分与信号参考价值有限。':'';
     var outlookText='预测后市'+(tr==='up'?'震荡上行':tr==='down'?'仍有调整压力':'维持震荡整理')+'（'+pred.method+'模型）';
+
+    // 收盘评分计算
+    var crScore=0,crProb=50,crSummary='',crR='中性震荡',crGood=0,crBad=0;
+    var crDetails=[];
+    // KDJ
+    if(NK(lb.kdj,'k')&&NK(lk,'d')){
+      var kdjS=0;
+      if(lk.k>lk.d&&lk.k<40)kdjS=18;else if(lk.k>lk.d&&lk.k<60)kdjS=12;else if(lk.k>lk.d)kdjS=6;else if(lk.k<lk.d&&lk.k>60)kdjS=-18;else if(lk.k<lk.d)kdjS=-8;
+      if(lk.j>100)kdjS-=5;if(lk.j<0)kdjS+=5;
+      crScore+=kdjS;crDetails.push(kdjS>0);if(kdjS>0)crGood++;else crBad++;
+    }
+    // MACD
+    if(NK(lb.macd,'dif')&&kl.length>1){var pm=kl[kl.length-2].macd;if(NK(pm,'macd')){var mS=0;
+      if(lb.macd.dif>lb.macd.dea&&lb.macd.macd>0)mS=12;else if(lb.macd.dif>lb.macd.dea)mS=6;else if(lb.macd.dif<lb.macd.dea&&lb.macd.macd<0)mS=-12;else mS=-6;
+      if(lb.macd.macd>pm.macd)mS+=3;else mS-=3;
+      crScore+=mS;if(mS>0)crGood++;else crBad++;
+    }}
+    // RSI
+    if(NK(lb.rsi,'rsi6')){var rsV=lb.rsi.rsi6,rS=rsV<30?12:rsV<45?8:rsV<55?2:rsV<70?-4:-12;crScore+=rS;if(rS>0)crGood++;else crBad++;}
+    // 均线
+    if(NK(lb.ma,'ma5')){var maS=0;if(lb.close>lb.ma.ma5&&lb.ma.ma5>lb.ma.ma10&&lb.ma.ma10>lb.ma.ma20)maS=15;else if(lb.close>lb.ma.ma5&&lb.ma.ma5>lb.ma.ma10)maS=10;else if(lb.close>lb.ma.ma20)maS=5;else if(lb.ma.ma60&&lb.close<lb.ma.ma60)maS=-15;else if(lb.close<lb.ma.ma20)maS=-10;else if(lb.close<lb.ma.ma10)maS=-5;
+      crScore+=maS;if(maS>0)crGood++;else crBad++;}
+    // 成交量
+    if(avg>0&&kl.length>=5){var vr=tv/avg,dir=lb.changePercent||0,vS=0;
+      if(dir>0&&vr>1.5)vS=12;else if(dir>0&&vr>1)vS=8;else if(dir>0)vS=4;else if(dir<0&&vr<0.7)vS=4;else if(dir<0&&vr>1.5)vS=-12;else if(dir<0)vS=-6;
+      crScore+=vS;if(vS>0)crGood++;else crBad++;}
+    // 布林带
+    if(NK(lb.boll,'upper')&&NK(lb.boll,'lower')&&lb.boll.upper>lb.boll.lower){var pos=(lb.close-lb.boll.lower)/(lb.boll.upper-lb.boll.lower);
+      var bS=pos<0.1?8:pos<0.3?5:pos<0.5?2:pos<0.7?-2:pos<0.9?-5:-8;
+      crScore+=bS;if(bS>0)crGood++;else crBad++;}
+    crScore=Math.max(-100,Math.min(100,crScore));
+    crProb=Math.round(((crScore+100)/200)*100);
+    if(crScore>=50){crR='强烈看涨';}else if(crScore>=20){crR='看涨';}else if(crScore<=-50){crR='强烈看跌';}else if(crScore<=-20){crR='看跌';}
+    // 与综合信号对齐
+    var isSigSell=sig.overall==='SELL'||sig.overall==='STRONG_SELL';
+    var isSigBuy=sig.overall==='BUY'||sig.overall==='STRONG_BUY';
+    if(isSigSell&&(crR==='强烈看涨'||crR==='看涨')){crR='中性（信号偏空）';crSummary='综合信号偏空，注意风险';crProb=Math.min(crProb,50);}
+    if(isSigBuy&&(crR==='强烈看跌'||crR==='看跌')){crR='中性（信号偏多）';crSummary='综合信号偏多，谨慎看涨';crProb=Math.max(crProb,50);}
+    crSummary=(crGood+crBad)===0?'K线样本不足，暂不做收盘评分（参考价值有限）':crGood>=5?'多项指标共振向好，明日看涨概率较高':crBad>=5?'多项指标偏空，注意回调风险':crGood>crBad?'指标偏多，谨慎看涨':crBad>crGood?'指标偏空，注意风险':'指标中性，方向不明确';
 
     this.setData({
       loading:0,stockName:this.data.stockName||info.name||'',
@@ -284,27 +335,27 @@ Page({
       dualCross:dc,hasDualCross:dc.length>0?1:0,
       limitPred:lp,hasLimitPred:lp?1:0,
       ffData:ffD,ffLatest:ffL,ffCount:ffD.length,
-      ffSummary:ffSummary,ffInDays:ffInDays,ffSum5:$(ffSum5),ffSum5Val:ffSum5,ffDominant:ffDominant,ffIn:ffIn?1:0,
+      ffSummary:ffSummary,ffInDays:ffInDays,ffSampleDays:ffSampleDays,ffSum5:(ffSum5>0?'+':'')+$(ffSum5),ffSum5Val:ffSum5,ffDominant:ffDominant,ffTrendClr:ffTrendClr,ffIn:ffIn?1:0,
       chipNow:chipNow,chipTrend:chipTrend,chipClr:chipClr,chipClrVal:chipClrVal,
 
-      macdBars:mb,macdSummary:(lm.dif?'· '+(lm.dif>lm.dea?'多头':'空头'):''),
+      macdBars:mb,macdSummary:(N(lm.dif)?'· '+(lm.dif>lm.dea?'多头':'空头'):''),
       macdDif:$(lm.dif),macdDea:$(lm.dea),macdBarVal:$(lm.macd),macdBarCls:(lm.macd||0)>=0?'up':'down',
-      rsiBars:rb,rsiSummary:'· '+(rn>70?'超买':rn<30?'超卖':'中性'),rsiNow:rn.toFixed(1),
-      kdjBars:kb,kdjSummary:'· '+(lk.k?(lk.k>lk.d?'多头':'空头'):''),kdjK:$(lk.k),kdjD:$(lk.d),kdjJ:$(lk.j),
+      rsiBars:rb,rsiSummary:'· '+(N(lb.rsi&&lb.rsi.rsi6)?(lb.rsi.rsi6>70?'超买':lb.rsi.rsi6<30?'超卖':'中性'):'数据不足'),rsiNow:rn.toFixed(1),
+      kdjBars:kb,kdjSummary:'· '+(N(lk.k)?(lk.k>lk.d?'多头':'空头'):''),kdjK:$(lk.k),kdjD:$(lk.d),kdjJ:$(lk.j),
 
       sigItems:si,sigDetails:sDet,sigBuyCount:bC,sigSellCount:sC,sigNeutralCount:nC,
 
       tlBars:tb,idOpenText:$Y(idD[0]&&idD[0].price),idAvgText:$Y(idD[idD.length-1]&&idD[idD.length-1].avgPrice),idMaxPctText:(idMaxPct>=0?'+':'')+idMaxPct.toFixed(2)+'%',idMinPctText:(idMinPct>=0?'+':'')+idMinPct.toFixed(2)+'%',idMaxPctCls:idMaxPct>=0?'up':'down',idMinPctCls:idMinPct>=0?'up':'down',
 
-      hk:1,klCount:kl.length,klLastDate:lb.date,klBars:kbs,
+      hk:1,klCount:kl.length,klLastDate:lb.date,klBars:kbs,klWarn:klWarn,
       predTrend:tM[tr]||'—',predCls:tr==='up'?'up':tr==='down'?'down':'neutral',
       predConf:cM[pred.confidence]||'—',predRange:predRange,
 
       r0:'今日'+(ch>=0?'上涨':'下跌')+Math.abs(info.changePercent||0).toFixed(2)+'%，最新价'+$Y(info.price),
-      rVol:avg>0?'成交量：今日'+(tv/avg).toFixed(1)+'倍于20日均量':'量能：—',
-      r1:lb.ma?'均线：'+(lb.close>(lb.ma.ma5||0)?'站上MA5':'跌破MA5')+'，'+(lb.close>(lb.ma.ma20||0)?'MA20上方运行':'MA20下方运行'):'均线：数据不足',
-      r2:lb.macd?'MACD：'+(lb.macd.dif>lb.macd.dea?'多头（DIF='+$(lb.macd.dif)+'>DEA='+$(lb.macd.dea)+'）':'空头（DIF='+$(lb.macd.dif)+'<DEA='+$(lb.macd.dea)+'）'):'MACD：—',
-      r3:lb.rsi?'RSI(6)：'+rn.toFixed(1)+'，处于'+(rn>70?'超买区，注意回调风险':rn<30?'超卖区，关注反弹机会':'中性区间'):'RSI：—',
+      rVol:avg>0?'成交量：今日'+(tv/avg).toFixed(1)+'倍于'+Math.min(20,kl.length)+'日均量':'量能：—',
+      r1:NK(lb.ma,'ma5')?'均线：'+(lb.close>(lb.ma.ma5||0)?'站上MA5':'跌破MA5')+'，'+(lb.close>(lb.ma.ma20||0)?'MA20上方运行':'MA20下方运行'):'均线：数据不足',
+      r2:NK(lb.macd,'dif')?'MACD：'+(lb.macd.dif>lb.macd.dea?'多头（DIF='+$(lb.macd.dif)+'>DEA='+$(lb.macd.dea)+'）':'空头（DIF='+$(lb.macd.dif)+'<DEA='+$(lb.macd.dea)+'）'):'MACD：—',
+      r3:NK(lb.rsi,'rsi6')?'RSI(6)：'+rn.toFixed(1)+'，处于'+(rn>70?'超买区，注意回调风险':rn<30?'超卖区，关注反弹机会':'中性区间'):'RSI：—',
       rOp:'【'+(isBuy?'建议买入':isSell?'建议卖出':'持有观望')+'】'+opAdvice,
       rSL:'止损 '+$Y(sig.stopLoss&&sig.stopLoss.price)+'（'+((sig.stopLoss&&sig.stopLoss.percent)||0)+'%）· 止盈 '+$Y(sig.takeProfit&&sig.takeProfit.price)+'（+'+(sig.takeProfit&&sig.takeProfit.percent||0)+'%）',
       rOutlook:outlookText+' ⚠️ 以上分析基于历史数据，不构成投资建议',
@@ -314,44 +365,6 @@ Page({
 
       bt:bt,
 
-      // 收盘评分计算
-      var crScore=0,crProb=50,crSummary='',crR='中性震荡',crGood=0,crBad=0;
-      var crDetails=[];
-      // KDJ
-      if(lb.kdj&&lk.d!=null&&lk.k!=null){
-        var kdjS=0;
-        if(lk.k>lk.d&&lk.k<40)kdjS=18;else if(lk.k>lk.d&&lk.k<60)kdjS=12;else if(lk.k>lk.d)kdjS=6;else if(lk.k<lk.d&&lk.k>60)kdjS=-18;else if(lk.k<lk.d)kdjS=-8;
-        if(lk.j>100)kdjS-=5;if(lk.j<0)kdjS+=5;
-        crScore+=kdjS;crDetails.push(kdjS>0);if(kdjS>0)crGood++;else crBad++;
-      }
-      // MACD
-      if(lb.macd&&kl.length>1){var pm=kl[kl.length-2].macd;if(pm){var mS=0;
-        if(lb.macd.dif>lb.macd.dea&&lb.macd.macd>0)mS=12;else if(lb.macd.dif>lb.macd.dea)mS=6;else if(lb.macd.dif<lb.macd.dea&&lb.macd.macd<0)mS=-12;else mS=-6;
-        if(lb.macd.macd>pm.macd)mS+=3;else mS-=3;
-        crScore+=mS;if(mS>0)crGood++;else crBad++;
-      }}
-      // RSI
-      if(rn!=null){var rS=rn<30?12:rn<45?8:rn<55?2:rn<70?-4:-12;crScore+=rS;if(rS>0)crGood++;else crBad++;}
-      // 均线
-      if(lb.ma){var maS=0;if(lb.close>lb.ma.ma5&&lb.ma.ma5>lb.ma.ma10&&lb.ma.ma10>lb.ma.ma20)maS=15;else if(lb.close>lb.ma.ma5&&lb.ma.ma5>lb.ma.ma10)maS=10;else if(lb.close>lb.ma.ma20)maS=5;else if(lb.ma.ma60&&lb.close<lb.ma.ma60)maS=-15;else if(lb.close<lb.ma.ma20)maS=-10;else if(lb.close<lb.ma.ma10)maS=-5;
-        crScore+=maS;if(maS>0)crGood++;else crBad++;}
-      // 成交量
-      if(avg>0){var vr=tv/avg,dir=lb.changePercent||0,vS=0;
-        if(dir>0&&vr>1.5)vS=12;else if(dir>0&&vr>1)vS=8;else if(dir>0)vS=4;else if(dir<0&&vr<0.7)vS=4;else if(dir<0&&vr>1.5)vS=-12;else if(dir<0)vS=-6;
-        crScore+=vS;if(vS>0)crGood++;else crBad++;}
-      // 布林带
-      if(lb.boll&&lb.boll.upper>lb.boll.lower){var pos=(lb.close-lb.boll.lower)/(lb.boll.upper-lb.boll.lower);
-        var bS=pos<0.1?8:pos<0.3?5:pos<0.5?2:pos<0.7?-2:pos<0.9?-5:-8;
-        crScore+=bS;if(bS>0)crGood++;else crBad++;}
-      crScore=Math.max(-100,Math.min(100,crScore));
-      crProb=Math.round(((crScore+100)/200)*100);
-      if(crScore>=50){crR='强烈看涨';}else if(crScore>=20){crR='看涨';}else if(crScore<=-50){crR='强烈看跌';}else if(crScore<=-20){crR='看跌';}
-      // 与综合信号对齐
-      var isSigSell=sig.overall==='SELL'||sig.overall==='STRONG_SELL';
-      var isSigBuy=sig.overall==='BUY'||sig.overall==='STRONG_BUY';
-      if(isSigSell&&(crR==='强烈看涨'||crR==='看涨')){crR='中性（信号偏空）';crSummary='综合信号偏空，注意风险';crProb=Math.min(crProb,50);}
-      if(isSigBuy&&(crR==='强烈看跌'||crR==='看跌')){crR='中性（信号偏多）';crSummary='综合信号偏多，谨慎看涨';crProb=Math.max(crProb,50);}
-      crSummary=crGood>=5?'多项指标共振向好，明日看涨概率较高':crBad>=5?'多项指标偏空，注意回调风险':crGood>crBad?'指标偏多，谨慎看涨':crBad>crGood?'指标偏空，注意风险':'指标中性，方向不明确';
       btDirClr:bt&&bt.metrics&&bt.metrics.directionCorrect?'#52c41a':'#ff4d4f',
       btDirTxt:bt&&bt.metrics&&bt.metrics.directionCorrect?'正确':'错误',
       btMae:'¥'+((bt&&bt.metrics&&bt.metrics.mae)||0).toFixed(2),
@@ -375,8 +388,8 @@ Page({
         return{
           code:idx.code,
           name:idx.name,
-          price:idx.price.toFixed(2),
-          pct:(ch>=0?'+':'')+idx.changePercent.toFixed(2)+'%',
+          price:(idx.price||0).toFixed(2),
+          pct:(ch>=0?'+':'')+((idx.changePercent||0)).toFixed(2)+'%',
           cls:ch>0?'up':ch<0?'down':'neutral',
         };
       });
@@ -434,7 +447,7 @@ Page({
       API.getIntraday(me.data.code).then(function(id){
         if(!id||!id.data||!id.data.length)return;
         var idD=id.data,idP=idD.map(function(p){return p.price});
-        var idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id.preClose||0;var idMaxPct=(idMx-pc)/pc*100,idMinPct=(idMn-pc)/pc*100;
+        var idMn=Math.min.apply(null,idP),idMx=Math.max.apply(null,idP),idR=idMx-idMn||.01,pc=id.preClose||idMx||0;var idMaxPct=pc>0?(idMx-pc)/pc*100:0,idMinPct=pc>0?(idMn-pc)/pc*100:0;
         var tb=idD.map(function(p,i){var t=p.time;return{time:t.charAt(0)==='0'?t.slice(1):t,h:(p.price-idMn)/idR*75+12,c:p.price>=pc?'#cf1322':'#3cb371',lb:i===0||i===idD.length-1||t.slice(-2)==='00'||t.slice(-2)==='30'}});
         me.setData({
           tlBars:tb,
@@ -462,7 +475,7 @@ Page({
   // 收盘后（15:01）自动刷新一次
   toggleTxExpanded(){this.setData({txExpanded:!this.data.txExpanded})},
 
-    scheduleCloseRefresh(){
+  scheduleCloseRefresh(){
     var me=this;
     var now=new Date(),h=now.getHours(),m=now.getMinutes();
     var t=h*100+m;
@@ -482,21 +495,15 @@ Page({
   doDiag(){
     var p=parseFloat(this.data.buyVal);if(!p||p<=0){wx.showToast({title:'请输入有效价格',icon:'none'});return}
     var me=this;
-    wx.request({
-      url:'https://stock-analysis-ryan.xyz/api/stock/'+this.data.code+'/purchase-analysis?buyPrice='+p,
-      success:function(r){
-        if(r.statusCode===200){
-          var d=r.data;
-          me.setData({
-            diag:d,diagScoreCls:d.score>=65?'up':'down',
-            diagProbCls:d.probability&&d.probability.up>=50?'up':'down',
-            diagProbTxt:(d.probability&&d.probability.up||0)+'%',
-            diagSlText:$Y(d.stopLoss&&d.stopLoss.price),diagTpText:$Y(d.takeProfit&&d.takeProfit.price),
-          });
-        }else wx.showToast({title:'诊断失败',icon:'none'});
-      },
-      fail:function(){wx.showToast({title:'网络错误',icon:'none'})},
-    });
+    API.getPurchaseAnalysis(this.data.code,p).then(function(d){
+      if(!d){wx.showToast({title:'诊断失败',icon:'none'});return}
+      me.setData({
+        diag:d,diagScoreCls:(d.score||0)>=65?'up':'down',
+        diagProbCls:d.probability&&d.probability.up>=50?'up':'down',
+        diagProbTxt:((d.probability&&d.probability.up)||0)+'%',
+        diagSlText:$Y(d.stopLoss&&d.stopLoss.price),diagTpText:$Y(d.takeProfit&&d.takeProfit.price),
+      });
+    }).catch(function(){wx.showToast({title:'诊断失败',icon:'none'})});
   },
 });
 
