@@ -22,12 +22,24 @@ export class StockDataService {
    * 支持 A股 + 港股
    */
   async searchStocks(keyword: string): Promise<SearchResultItem[]> {
+    const kw = (keyword || '').trim();
+    if (!kw) return [];
+
+    // 主搜索源：东方财富 suggest —— 覆盖沪深主板/创业板、科创板(23)、北交所(NEEQ)、港股
     try {
-      const results = await this.sdk.search(keyword);
+      const emResults = await this.searchByEastmoney(kw);
+      if (emResults.length > 0) return emResults;
+    } catch (err: any) {
+      console.warn('[StockData] Eastmoney search failed, fallback to sdk:', err?.message);
+    }
+
+    // 兜底：腾讯 smartbox（科创板 type 为 GP-A-KCB，之前只匹配 GP-A/GP 会漏掉）
+    try {
+      const results = await this.sdk.search(kw);
       return results
         .filter((r: any) =>
           r.category === 'stock' &&
-          (r.type === 'GP-A' || r.type === 'GP')  // A股 + 港股
+          (r.type === 'GP' || String(r.type || '').startsWith('GP-A'))
         )
         .map((r: any) => {
           const prefix = r.code.match(/^(sh|sz|bj|hk)/)?.[1] || 'sh';
@@ -36,12 +48,45 @@ export class StockDataService {
             name: r.name,
             market: prefix,
             type: r.type,
-          }
+          };
         });
     } catch (err) {
       console.error('[StockData] Search failed:', err);
-      return this.fallbackSearch(keyword);
+      return this.fallbackSearch(kw);
     }
+  }
+
+  /**
+   * 东方财富搜索接口——覆盖科创板、北交所等新股，且返回带名称
+   */
+  private async searchByEastmoney(keyword: string): Promise<SearchResultItem[]> {
+    const token = 'D43BF722C8E33BDC906FB84D85E326E8';
+    const url = `https://searchapi.eastmoney.com/api/suggest/get?input=${encodeURIComponent(keyword)}&type=14&count=15&token=${token}`;
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://www.eastmoney.com/' },
+      signal: AbortSignal.timeout(6000),
+    });
+    const json: any = await resp.json();
+    const items: any[] = json?.QuotationCodeTable?.Data || [];
+
+    const out: SearchResultItem[] = [];
+    for (const it of items) {
+      const code = String(it?.Code || '').trim();
+      const name = String(it?.Name || '').trim();
+      const cls = it?.Classify;
+      if (!code || !name) continue;
+
+      let market = '';
+      if (cls === 'HK') market = 'hk';
+      else if (cls === 'NEEQ') market = 'bj';        // 北交所
+      else if (cls === 'AStock' || cls === '23') {   // 沪深 + 科创板
+        market = code.startsWith('6') ? 'sh' : 'sz';
+      } else {
+        continue;                                     // 过滤指数/基金/债券/美股等
+      }
+      out.push({ code, name, market, type: 'GP-A' });
+    }
+    return out;
   }
 
   /**
@@ -931,6 +976,8 @@ export class StockDataService {
   private getMarketPrefix(code: string): string {
     // 港股代码通常为5位数字
     if (code.length <= 5 && /^\d{1,5}$/.test(code)) return 'hk';
+    // 北交所新代码段 920xxx（须在 sh/sz 判断之前）
+    if (code.startsWith('920')) return 'bj';
     // A股：6位数字
     if (code.startsWith('6')) return 'sh';
     if (code.startsWith('0') || code.startsWith('3') || code.startsWith('2')) return 'sz';
